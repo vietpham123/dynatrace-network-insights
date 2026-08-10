@@ -43,7 +43,7 @@
       "action": "dynatrace.automations:execute-dql-query",
       "conditions": {},
       "input": {
-        "query": "timeseries oper = avg(cno.if.oper_status), admin = avg(cno.if.admin_status), by:{sys_name, `device.address`, if_descr}, from:-5m | fieldsAdd o = arrayLast(oper), a = arrayLast(admin), device = if(isNotNull(sys_name) and sys_name != \"n/a\" and sys_name != \"\", lower(sys_name), else: `device.address`) | filter isNotNull(o) and a == 1 | summarize down_list = collectArray(if(o==2, if_descr)), up = countIf(o==1), down = countIf(o==2), by:{device} | fieldsAdd down_list = arrayRemoveNulls(down_list) | filter up > 0 and down > 0 | sort down desc"
+        "query": "timeseries o = min(cno.if.oper_status), a = max(cno.if.admin_status), by:{sys_name, `device.address`, if_descr}, from:-24h, interval:1m | fieldsAdd oc = arrayRemoveNulls(o), ac = arrayRemoveNulls(a) | filter arraySize(oc) > 0 and arrayLast(ac) == 1 | fieldsAdd last = arrayLast(oc), everUp = arrayMin(oc), device = if(isNotNull(sys_name) and sys_name != \"n/a\" and sys_name != \"\", lower(sys_name), else: `device.address`) | summarize down_list = collectArray(if(last == 2 and everUp == 1, if_descr)), up = countIf(last == 1), down = countIf(last == 2 and everUp == 1), by:{device} | fieldsAdd down_list = arrayRemoveNulls(down_list) | filter up > 0 and down > 0 | sort down desc"
       },
       "name": "classify",
       "position": {
