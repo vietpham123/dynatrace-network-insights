@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Before you deploy — four decisions</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  :root{
+    --bg:#f5f7fa; --surface:#ffffff; --surface-2:#eef1f6; --ink:#141b26; --muted:#586376;
+    --border:#e0e5ee; --accent:#0b7c8c; --accent-ink:#0b7c8c; --accent-soft:#dcf1f4;
+    --req:#127a4b; --req-soft:#dcefe4; --opt:#a25a06; --opt-soft:#f6e9d8;
+    --alert:#b02a37; --alert-soft:#f6dfe1; --code:#0d3a42;
+    --radius:12px; --maxw:900px;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0d1219; --surface:#151c26; --surface-2:#1b2430; --ink:#e7edf5; --muted:#93a1b5;
+      --border:#26303d; --accent:#2fc4d8; --accent-ink:#57d3e4; --accent-soft:#0e2b31;
+      --req:#3fce8e; --req-soft:#10281d; --opt:#efb457; --opt-soft:#2c2211;
+      --alert:#f4818d; --alert-soft:#2c1417; --code:#a9e7f0;
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#f5f7fa; --surface:#ffffff; --surface-2:#eef1f6; --ink:#141b26; --muted:#586376;
+    --border:#e0e5ee; --accent:#0b7c8c; --accent-ink:#0b7c8c; --accent-soft:#dcf1f4;
+    --req:#127a4b; --req-soft:#dcefe4; --opt:#a25a06; --opt-soft:#f6e9d8;
+    --alert:#b02a37; --alert-soft:#f6dfe1; --code:#0d3a42;
+  }
+  :root[data-theme="dark"]{
+    --bg:#0d1219; --surface:#151c26; --surface-2:#1b2430; --ink:#e7edf5; --muted:#93a1b5;
+    --border:#26303d; --accent:#2fc4d8; --accent-ink:#57d3e4; --accent-soft:#0e2b31;
+    --req:#3fce8e; --req-soft:#10281d; --opt:#efb457; --opt-soft:#2c2211;
+    --alert:#f4818d; --alert-soft:#2c1417; --code:#a9e7f0;
+  }
+
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;
+    -webkit-font-smoothing:antialiased;margin:0;}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:40px 22px 80px;}
+  .wrap > section{margin-top:44px;}
+
+  a{color:var(--accent-ink);}
+  h1,h2,h3{line-height:1.2;text-wrap:balance;margin:0;}
+  h1{font-size:clamp(28px,5vw,40px);font-weight:800;letter-spacing:-.02em;}
+  h2{font-size:clamp(20px,3.4vw,25px);font-weight:750;letter-spacing:-.01em;
+    padding-bottom:10px;border-bottom:1px solid var(--border);margin-bottom:20px;}
+  h3{font-size:16px;font-weight:700;}
+  p{margin:12px 0;max-width:68ch;}
+  .lede{font-size:clamp(16px,2.4vw,19px);color:var(--muted);max-width:66ch;}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--accent-ink);font-weight:600;}
+  strong{font-weight:680;}
+  code{font-family:var(--mono);font-size:.9em;background:var(--surface-2);color:var(--code);
+    padding:1px 6px;border-radius:5px;border:1px solid var(--border);white-space:nowrap;}
+
+  /* hero */
+  .hero{padding-bottom:6px;}
+  .hero h1{margin-top:8px;}
+  .outcome{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px;}
+  .chip{font-size:13px;background:var(--surface);border:1px solid var(--border);
+    border-radius:999px;padding:6px 13px;color:var(--ink);font-weight:550;}
+  .chip b{color:var(--accent-ink);font-weight:700;}
+
+  /* flow diagram */
+  .flow{display:flex;flex-direction:column;gap:6px;align-items:stretch;margin:8px 0 4px;}
+  .node{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    padding:14px 16px;}
+  .node .k{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
+  .node .t{font-weight:700;font-size:15px;margin:3px 0 2px;}
+  .node .d{font-size:13px;color:var(--muted);line-height:1.45;}
+  .node.spine{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent-soft);}
+  .arrow{display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:20px;
+    line-height:1;height:16px;}
+  .arrow::after{content:"↓";}
+  .cap{font-size:13px;color:var(--muted);margin-top:14px;}
+  @media (min-width:760px){
+    .flow{flex-direction:row;align-items:stretch;gap:4px;}
+    .arrow{height:auto;width:26px;flex:0 0 26px;}
+    .arrow::after{content:"→";}
+  }
+
+  /* glossary */
+  .gloss{display:grid;grid-template-columns:1fr;gap:0;background:var(--surface);
+    border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+  .gloss div{display:grid;grid-template-columns:180px 1fr;gap:16px;padding:13px 18px;
+    border-top:1px solid var(--border);}
+  .gloss div:first-child{border-top:0;}
+  .gloss dt{font-weight:700;font-size:14px;}
+  .gloss dd{margin:0;color:var(--muted);font-size:14px;}
+  @media (max-width:560px){ .gloss div{grid-template-columns:1fr;gap:2px;} }
+
+  /* tiers + piece cards */
+  .tier{margin-top:26px;}
+  .tierhead{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:4px;}
+  .tierhead h3{font-size:15px;font-family:var(--mono);letter-spacing:.02em;text-transform:uppercase;color:var(--ink);}
+  .tierhead .sub{font-size:13px;color:var(--muted);}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:14px;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+    padding:16px 17px;display:flex;flex-direction:column;gap:7px;}
+  .card .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;}
+  .card h4{margin:0;font-size:15px;font-weight:700;}
+  .card .id{font-family:var(--mono);font-size:11.5px;color:var(--muted);margin-top:2px;word-break:break-all;}
+  .card p{margin:0;font-size:13.5px;max-width:none;}
+  .card .why{font-size:13.5px;color:var(--muted);border-left:2px solid var(--accent);padding-left:11px;}
+  .card .why b{color:var(--ink);font-weight:650;}
+  .card.spine{border-color:var(--accent);}
+
+  .tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
+    font-weight:700;padding:3px 8px;border-radius:6px;white-space:nowrap;flex:none;}
+  .tag.req{color:var(--req);background:var(--req-soft);}
+  .tag.opt{color:var(--opt);background:var(--opt-soft);}
+
+  /* steps */
+  .steps{display:flex;flex-direction:column;gap:2px;counter-reset:step;}
+  .phase{font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--accent-ink);font-weight:700;margin:22px 0 10px;}
+  .step{display:grid;grid-template-columns:34px 1fr;gap:14px;padding:14px 0;border-top:1px solid var(--border);}
+  .step:first-of-type{border-top:0;}
+  .step .n{counter-increment:step;font-family:var(--mono);font-weight:700;font-size:15px;color:var(--accent-ink);
+    background:var(--accent-soft);border-radius:8px;height:32px;display:flex;align-items:center;justify-content:center;}
+  .step .n::before{content:counter(step);}
+  .step h4{font-size:15.5px;font-weight:700;margin:4px 0 0;}
+  .step p{margin:7px 0 0;font-size:14px;}
+  pre.cmd{background:var(--surface-2);border:1px solid var(--border);border-radius:9px;
+    padding:12px 14px;overflow-x:auto;margin:11px 0 2px;}
+  pre.cmd code{background:none;border:0;padding:0;white-space:pre;color:var(--code);font-size:12.5px;line-height:1.7;display:block;}
+
+  /* callouts */
+  .callout{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);
+    border-radius:10px;padding:15px 18px;margin:18px 0;}
+  .callout.warn{border-left-color:var(--opt);}
+  .callout h4{margin:0 0 6px;font-size:14.5px;font-weight:700;}
+  .callout p{margin:6px 0 0;font-size:14px;}
+  .callout ul{margin:8px 0 0;padding-left:18px;}
+  .callout li{font-size:14px;margin:6px 0;color:var(--muted);}
+  .callout li b{color:var(--ink);}
+
+  /* verify */
+  .check{display:flex;gap:12px;padding:13px 0;border-top:1px solid var(--border);align-items:flex-start;}
+  .check:first-child{border-top:0;}
+  .check .mk{color:var(--req);font-weight:800;flex:none;font-family:var(--mono);}
+  .check .b{font-size:14px;}
+  .check .b b{font-weight:680;}
+  .check .b .how{color:var(--muted);}
+
+  footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--border);color:var(--muted);font-size:13px;}
+  /* additions for this guide */
+  .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px;}
+  .pill{font-family:var(--mono);font-size:11.5px;letter-spacing:.04em;background:var(--surface);
+    border:1px solid var(--border);border-radius:999px;padding:5px 12px;color:var(--muted);}
+  .callout.alert{border-left-color:var(--alert);}
+  .callout.alert h3,.callout.alert h4{color:var(--alert);margin:0 0 6px;font-size:15px;font-weight:750;}
+  table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--radius);overflow:hidden;margin:16px 0;font-size:14px;}
+  th,td{text-align:left;padding:11px 15px;border-top:1px solid var(--border);vertical-align:top;}
+  th{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700;
+    background:var(--surface-2);border-top:0;}
+  .scroll{overflow-x:auto;}
+  /* the decision blocks */
+  .decision{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+    padding:20px 22px;margin:18px 0;}
+  .decision.irreversible{border-left:3px solid var(--alert);}
+  .decision .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+    font-weight:700;margin-bottom:6px;}
+  .decision.irreversible .kicker{color:var(--alert);}
+  .decision h3{font-size:19px;font-weight:750;margin:0 0 10px;letter-spacing:-.01em;}
+  .decision .ask{background:var(--surface-2);border-radius:9px;padding:13px 16px;margin:14px 0 0;}
+  .decision .ask .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--accent-ink);font-weight:700;display:block;margin-bottom:5px;}
+  .decision .ask p{margin:0;font-size:14.5px;font-style:italic;}
+  .outcomes{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin-top:14px;}
+  .outcome{border:1px solid var(--border);border-radius:10px;padding:13px 15px;background:var(--surface-2);}
+  .outcome b{display:block;font-size:13.5px;margin-bottom:4px;}
+  .outcome span{font-size:13px;color:var(--muted);line-height:1.5;}
+  .num{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:8px;flex:none;
+    background:var(--accent-soft);color:var(--accent-ink);font-family:var(--mono);font-weight:700;font-size:13px;}
+  .hdrow{display:flex;gap:12px;align-items:center;margin-bottom:4px;}
+</style>
+</head>
+<body>
+<main class="wrap">
+
+<header class="hero">
+  <div class="eyebrow">Network Insights &middot; Before you deploy</div>
+  <h1>Four decisions to make first</h1>
+  <p class="lede">Read this before installing anything. Three of these are easy to change later.
+     One is not, and getting it wrong costs you entities you cannot delete. None of them require
+     touching Dynatrace &mdash; they are questions about your network and your organisation.</p>
+  <div class="meta">
+    <span class="pill">~30 minutes</span>
+    <span class="pill">no tooling needed</span>
+    <span class="pill">read before install</span>
+  </div>
+</header>
+
+<div class="callout">
+  <h4>Why this exists as its own document</h4>
+  <p>Once the app is installed it guides the rest of the deployment itself &mdash; it can see your
+     tenant, so it knows what is configured and what is not. These four questions come <b>before</b>
+     that, which is the one place a document can tell you something the product cannot.</p>
+</div>
+
+<h2 id="d1">1. Does any part of the estate reuse IP address space?</h2>
+<div class="decision irreversible">
+  <div class="kicker">Irreversible &middot; answer before onboarding anything</div>
+  <h3>This is the only decision here that cannot be undone.</h3>
+  <p>Device identity is the <b>management IP address</b>. Two devices that share an address
+     &mdash; routine after a merger, and normal for DR pairs and Kubernetes meshes &mdash;
+     <b>collapse into a single entity</b>.</p>
+  <p>And entities are permanent: the delete API returns <code>405</code>, and they do not age out.
+     Entities with 90+ days of zero data are still listed. So a wrong answer here is not something
+     you clean up later &mdash; it is something you live with.</p>
+  <div class="ask"><span class="lbl">Ask your network team</span>
+    <p>"Is there anywhere in the estate &mdash; any acquired site, any DR pair, any lab &mdash;
+       where two devices could have the same management IP?"</p></div>
+  <div class="outcomes">
+    <div class="outcome"><b>No overlap</b><span>Proceed. This is the common case for a single
+      well-run estate.</span></div>
+    <div class="outcome"><b>Overlap exists</b><span>Resolve it first: NAT at the interconnect,
+      VRF-unique management addressing, or poll each estate from its own ActiveGate group.</span></div>
+    <div class="outcome"><b>Nobody is sure</b><span>Treat that as yes. Scope the first deployment to
+      one site you <em>can</em> vouch for, and widen once you know.</span></div>
+  </div>
+  <p style="margin-top:14px"><b>Topology is already safe.</b> Adjacency joins on the LLDP chassis
+     ID, not on IP, precisely because overlapping ranges are legitimate. It is device identity, not
+     link discovery, that is at risk.</p>
+</div>
+
+<h2 id="d2">2. How large is the first deployment?</h2>
+<div class="decision">
+  <div class="kicker">Reversible &middot; but it shapes the first month</div>
+  <h3>Scope it to a site. A few hundred devices is comfortable.</h3>
+  <p>A whole large estate is not, yet &mdash; and this is a product limit today, stated plainly
+     rather than discovered in front of your team:</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Area</th><th>Where it stands</th></tr></thead>
+    <tbody>
+      <tr><td>Roster and liveness queries</td><td>Unbounded &mdash; no row limit</td></tr>
+      <tr><td>Fleet table</td><td>No row virtualisation; every row is in the DOM</td></tr>
+      <tr><td>Topology</td><td>Caps at 400 edges, with a visible truncation banner</td></tr>
+      <tr><td>Topology layout</td><td>Readable to roughly 12 nodes per tier; unreadable near 60</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>At tens of thousands of interfaces the Fleet and NetFlow pages would attempt to render the
+     whole estate.</p>
+  <div class="ask"><span class="lbl">Decide with your team</span>
+    <p>"Which single site do we start with &mdash; one that is representative enough to prove the
+       value, and small enough to render?"</p></div>
+  <div class="callout warn" style="margin:16px 0 0">
+    <h4>Deploying one app per branch does not help</h4>
+    <p>Site membership lives in app state, not in the metrics, so each instance would still query
+       the whole estate and filter in the browser &mdash; N&times; the load for the same result. It
+       also breaks the cross-site views (hub&harr;branch, WAN topology, fleet-wide hotspots) that
+       justify the app in the first place. Multi-app is a tenancy argument, not a scale one.</p>
+  </div>
+</div>
+
+<h2 id="d3">3. What will it cost to run?</h2>
+<div class="decision">
+  <div class="kicker">Reversible &middot; but easier to plan than to unwind</div>
+  <h3>Metrics are predictable. Flow is the lever.</h3>
+  <p>SNMP metric ingest with 15-month retention is straightforward to size &mdash; it scales with
+     interface count and poll interval, both of which you control. Use
+     <a href="network-sizing-calculator.html">the sizing calculator</a> with your interface count.</p>
+  <p><b>NetFlow is the variable one.</b> Flow arrives as <em>logs</em>, and log volume is what moves
+     the bill. It is also the highest-value data in the product &mdash; it is what answers "who is
+     talking to whom" &mdash; so the question is not whether to collect it but how much.</p>
+  <div class="outcomes">
+    <div class="outcome"><b>Full</b><span>Every flow record. Highest fidelity, highest cost.</span></div>
+    <div class="outcome"><b>Aggregated</b><span>Rolled up before ingest. Most estates land here.</span></div>
+    <div class="outcome"><b>Sampled</b><span>A fraction of records. Cheapest; fine for trend and
+      top-talker work, weaker for forensics.</span></div>
+  </div>
+  <p style="margin-top:14px">You pick this when you set up the collector, and you can change it
+     afterwards. The app's look-back picker defaults deliberately tight to bound query cost as
+     well.</p>
+  <div class="ask"><span class="lbl">Ask your Dynatrace account team</span>
+    <p>"Here is our interface count and our expected flow volume &mdash; what does that mean for
+       our licence?"</p></div>
+</div>
+
+<h2 id="d4">4. Who needs to approve this, and what will they ask for?</h2>
+<div class="decision">
+  <div class="kicker">Reversible &middot; but it is the usual cause of delay</div>
+  <h3>Start this early. It is almost always the long pole.</h3>
+  <p>Two approvals are typically needed, and neither can be granted while you wait:</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Approval</th><th>What to ask for</th><th>Who</th></tr></thead>
+    <tbody>
+      <tr><td><b>Install the app</b></td>
+          <td>The <code>app-engine:apps:install</code> permission on the account doing the install</td>
+          <td>Your Dynatrace administrator</td></tr>
+      <tr><td><b>Run the app</b></td>
+          <td><code>app-engine:apps:run</code> for the team, plus the metric and log read permissions
+              they most likely already hold</td>
+          <td>Your Dynatrace administrator</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>A security reviewer will usually ask three things. All three have concrete answers:</p>
+  <div class="outcomes">
+    <div class="outcome"><b>What can the app do?</b><span>Exactly the permissions listed in
+      <code>app.config.json</code>, each with a comment saying why. Nothing outside that list is
+      possible.</span></div>
+    <div class="outcome"><b>Where do credentials live?</b><span>The Dynatrace Credential Vault. The
+      app references entries by id and never reads a secret.</span></div>
+    <div class="outcome"><b>Who signs the code?</b><span>You do. Extensions are signed with your own
+      certificate authority &mdash; nothing runs that you did not sign.</span></div>
+  </div>
+  <div class="ask"><span class="lbl">Send ahead of the install session</span>
+    <p>"Here is the permission list and the source. Can we get
+       <code>app-engine:apps:install</code> granted before Thursday?"</p></div>
+</div>
+
+<h2>What you need in place on the day</h2>
+<div class="cards">
+  <div class="card">
+    <div class="top"><div><h4>An ActiveGate</h4></div><span class="tag req">Required</span></div>
+    <p>A host inside your network that can reach your devices over SNMP. The app's setup guide walks
+       through installing one.</p>
+    <div class="why">It does the polling and runs the extensions. Nothing reaches your devices from
+      the Dynatrace side.</div>
+  </div>
+  <div class="card">
+    <div class="top"><div><h4>A read-only SNMP credential</h4></div><span class="tag req">Required</span></div>
+    <p>v2c community or v3 credentials, for the devices in your first site.</p>
+    <div class="why">Read-only is sufficient for everything the product does with SNMP.</div>
+  </div>
+  <div class="card">
+    <div class="top"><div><h4>Somewhere to build</h4></div><span class="tag req">Required</span></div>
+    <p>A machine with Node.js 16.13+ and Python, able to reach the public npm and PyPI registries.</p>
+    <div class="why"><b>Check the registry access ahead of time.</b> Corporate proxies block it more
+      often than anything else, and it stops the session before it starts.</div>
+  </div>
+  <div class="card">
+    <div class="top"><div><h4>A certificate authority</h4></div><span class="tag opt">Created on the day</span></div>
+    <p>One clean CA for signing extensions. You generate it during setup &mdash; nothing to obtain
+       in advance.</p>
+    <div class="why">One per project, and keep the vault clean: a broken or expired CA there can
+      stop <em>every</em> custom extension loading.</div>
+  </div>
+</div>
+
+<h2>Then what</h2>
+<p>With those four answered, the order is short:</p>
+<div class="steps">
+  <div class="step"><div class="n"></div><div>
+    <h4>Install the app</h4>
+    <p>Follow <a href="customer-install-walkthrough.html">the install walkthrough</a> &mdash; the one
+       document you need before the app can guide you itself.</p></div></div>
+  <div class="step"><div class="n"></div><div>
+    <h4>Open the Configuration page</h4>
+    <p>It reads your tenant and shows what is set up and what is not. Work through the tracks in the
+       order it numbers them, starting with the ActiveGate.</p></div></div>
+  <div class="step"><div class="n"></div><div>
+    <h4>Assign sites and roles as you onboard</h4>
+    <p>During onboarding, not after. Site scoping is the whole scale strategy, and
+       <b>Unassigned</b> is the one bucket no view can help with.</p></div></div>
+</div>
+
+<footer>
+  <p>Network Insights &mdash; pre-deployment brief. Everything here is a decision about your network
+     or your organisation; nothing requires Dynatrace access to answer. Companion documents:
+     <code>customer-install-walkthrough.html</code> to install the app,
+     <code>METRIC-CONTRACT.md</code> if you intend to feed the app from your own extensions, and the
+     app's own Configuration page for everything after that.</p>
+</footer>
+
+</main>
+</body>
+</html>

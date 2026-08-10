@@ -1,0 +1,41 @@
+name: custom:cno.network.netbox
+version: 0.0.3
+minDynatraceVersion: "1.301.0"
+author:
+  name: Viet Pham
+
+# NetBox -> Dynatrace SOURCE extension (remote / ActiveGate). Ports the on-prem crons
+# emit_inventory.py + emit_dependencies.py onto the AG: reads the NetBox device roster and
+# the declared cabling, lands them in Grail as metrics with NO reach-back from cloud workflows.
+# The companion declarative extension custom:cno.network.dependency maps cno.dep.* into
+# network:device Smartscape edges — this one only produces the metrics.
+python:
+  runtime:
+    module: netbox_extension
+    version:
+      min: "3.10"
+  activation:
+    remote:
+      path: activationSchema.json
+
+metrics:
+  - key: cno.inv.device
+    metadata:
+      displayName: "NetBox device (1=active)"
+      description: "Authoritative device roster from NetBox; value = 1 active, 0 present-but-inactive"
+      unit: "State"
+  - key: cno.inv.linked
+    metadata:
+      displayName: "NetBox device DT-linked"
+      description: "1 if NetBox carries the dynatrace_entity_id custom field"
+      unit: "State"
+  - key: cno.dep.uses
+    metadata:
+      displayName: "Device dependency edge"
+      description: "Declared cable -> device depends on upstream (link_type=data|power)"
+      unit: "Count"
+  - key: cno.dep.uses_network
+    metadata:
+      displayName: "Host->device dependency edge"
+      description: "Server cabled to a network device (host CALLS device)"
+      unit: "Count"

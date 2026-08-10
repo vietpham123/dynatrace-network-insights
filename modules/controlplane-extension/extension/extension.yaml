@@ -1,0 +1,62 @@
+name: custom:cno.network.controlplane
+version: 0.1.1
+minDynatraceVersion: "1.301.0"
+author:
+  name: Viet Pham
+
+# CONTROL-PLANE extension (remote / ActiveGate) — LLDP neighbours + BGP/OSPF adjacencies.
+#
+# WHY PYTHON, AND WHY THESE TWO BELONG TOGETHER. The declarative SNMP datasource decodes
+# binary OCTET STRINGs as UTF-8 and DROPS invalid bytes. That destroys every field that
+# identifies a peer, in all three protocols:
+#   * LLDP  — lldpRemChassisId is a raw MAC. Measured: 20 4E 7F 4E C3 E6 -> ' N\x7fN' (§L)
+#   * BGP   — bgpPeerRemoteAddr / bgpPeerIdentifier are SNMP IpAddress, i.e. FOUR RAW BYTES.
+#             10.0.10.3 is 0A 00 0A 03 — three of those four are control characters.
+#   * OSPF  — ospfNbrRtrId is the same IpAddress shape.
+# In every case the STATE survives (it is an integer) while the PEER IDENTITY is destroyed —
+# "a BGP session is down" with no idea which peer, which is worse than collecting nothing.
+# Python sees the raw bytes, so all of it is decoded in codec.py and unit-tested.
+#
+# Renamed from custom:cno.network.lldp at v0.0.5, deliberately while our lab was the only
+# deployment: an extension rename is free today and a customer migration later.
+#
+# runtime.version.min stays "3.10" ON PURPOSE — a FLOOR that 3.14 satisfies. Every ActiveGate
+# in the lab is 1.343 while the 3.14 runtime arrives at 1.347. The extension is pure-Python
+# end to end (pysnmp, pyasn1, dt-extensions-sdk are all py3-none-any), so it carries no
+# compiled wheels and needs no rebuild when the runtime moves. See §M4.
+
+# CAPABILITY TOGGLES ARE BOOLEANS IN THE ACTIVATION SCHEMA, NOT FEATURE SETS.
+# A top-level `featureSets:` block was tried here first and the tenant REJECTED the upload:
+#   "$: property 'featureSets' is not defined in the schema and the schema does not allow
+#    additional properties"
+# So each capability is an explicit boolean in activationSchema.json instead. Same effect for the
+# operator (a toggle on the monitoring configuration, settable from the app), and it is the shape
+# that actually deploys.
+#
+# 2026-08-05 — THE CONCLUSION ORIGINALLY DRAWN HERE WAS PROBABLY WRONG, and it is left visible
+# rather than quietly deleted because the reasoning is the instructive part. This comment used to
+# continue: "feature sets are declared with `featureSet:` on a DATASOURCE GROUP, which only exists
+# for declarative extensions — a Python extension has no groups to hang them on."
+#
+# The rejection was real, but it says only that the block cannot sit at the ROOT. Evidence from
+# another project that Python extensions DO support feature sets, nested under `python:` — the
+# SDK's own local client parses exactly that:
+#
+#     yaml_feature_sets = extension_yaml.get("python", {}).get("featureSets", [])
+#     for feature_set in yaml_feature_sets:
+#         name = feature_set["featureSet"]
+#         metrics = [m["key"] for m in feature_set["metrics"]]
+#
+# One failed placement was generalised into "the mechanism does not exist for this extension type".
+# NOT YET VERIFIED AGAINST THIS TENANT — do that before refactoring. If it holds, the booleans
+# below can become real feature sets, which would let an operator gate LLDP/BGP/OSPF the same way
+# the SNMP extension gates its subgroups, and would make the two extensions consistent.
+
+python:
+  runtime:
+    module: controlplane_extension
+    version:
+      min: "3.10"
+  activation:
+    remote:
+      path: activationSchema.json

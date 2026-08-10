@@ -1,0 +1,216 @@
+{
+  "$comment": [
+    "THE cno.* CONTRACT — machine-readable.",
+    "",
+    "Network Insights is a view over a metric model, not over a specific extension. Anything that",
+    "emits the keys and dimensions below appears in the app, whether it came from SNMP, a vendor",
+    "API, or a script. This file is the spec; docs/METRIC-CONTRACT.md is the same thing in prose.",
+    "",
+    "It exists in this form so an agent can CHECK its work rather than hope. scripts/",
+    "verify_contract.py reads this file, queries a tenant, and reports which tiers a device",
+    "satisfies and which dimension is missing where.",
+    "",
+    "Derived from what the app actually queries — not from what the extensions happen to emit.",
+    "The app is the consumer, so the app defines the contract."
+  ],
+  "contractVersion": "1.0.0",
+  "verifiedAgainst": {
+    "app": "0.107.0",
+    "referenceExtension": "custom:cno.network.interfaces 0.0.14",
+    "date": "2026-08-10"
+  },
+
+  "identity": {
+    "key": "device.address",
+    "meaning": "The device's management IP. This is the join key for everything.",
+    "warnings": [
+      "Entity identity is derived from this address. Two devices sharing one address collapse into a single entity.",
+      "Device entities cannot be deleted (the API returns 405) and never age out. Renumbering orphans the old entity permanently.",
+      "Settle addressing BEFORE onboarding at scale. This is the one decision here that cannot be undone."
+    ]
+  },
+
+  "tiers": [
+    {
+      "id": "roster",
+      "order": 1,
+      "unlocks": "Devices list, Overview counts, liveness, site and role assignment",
+      "summary": "The minimum. Without this a device does not exist as far as the app is concerned.",
+      "requires": {
+        "anyOf": [
+          { "metric": "cno.device.uptime",   "dimensions": ["sys_name", "device.address"] },
+          { "metric": "cno.if.oper_status",  "dimensions": ["sys_name", "device.address"] }
+        ]
+      },
+      "note": "cno.device.uptime is sysUpTime from MIB-II (1.3.6.1.2.1.1.3.0) — every SNMP agent answers it, and it is ungated by any feature set. It is the cheapest way to satisfy this tier."
+    },
+    {
+      "id": "interfaces",
+      "order": 2,
+      "unlocks": "Interface tables on Device Detail, throughput and error charts, NetFlow interface joins",
+      "summary": "Per-interface visibility. Everything here is keyed by if_index in addition to the device.",
+      "requires": {
+        "allOf": [
+          { "metric": "cno.if.oper_status", "dimensions": ["sys_name", "device.address", "if_index"] }
+        ],
+        "recommended": [
+          { "metric": "cno.if.admin_status",    "dimensions": ["device.address", "if_index"] },
+          { "metric": "cno.if.high_speed",      "dimensions": ["device.address", "if_index"] },
+          { "metric": "cno.if.in_octets.count", "dimensions": ["device.address", "if_index"] },
+          { "metric": "cno.if.out_octets.count","dimensions": ["device.address", "if_index"] },
+          { "metric": "cno.if.in_errors.count", "dimensions": ["device.address", "if_index", "if_descr"] },
+          { "metric": "cno.if.out_errors.count","dimensions": ["device.address", "if_index"] }
+        ]
+      },
+      "note": "if_descr is what the UI shows as the interface name. Without it interfaces are listed by index, which is correct but unreadable."
+    },
+    {
+      "id": "device-health",
+      "order": 3,
+      "unlocks": "CPU and memory tiles on Device Detail",
+      "summary": "Optional. Most estates do not expose these over SNMP; their absence is not a fault.",
+      "requires": {
+        "anyOf": [
+          { "metric": "cno.device.cpu_usage", "dimensions": ["sys_name", "device.address"] }
+        ],
+        "recommended": [
+          { "metric": "cno.device.memory_used", "dimensions": ["device.address"] },
+          { "metric": "cno.device.memory_free", "dimensions": ["device.address"] }
+        ]
+      },
+      "note": "The app falls back to com.dynatrace.extension.network_device.cpu_usage if cno.device.cpu_usage is absent, so Dynatrace's own SNMP extensions partially satisfy this tier."
+    },
+    {
+      "id": "topology",
+      "order": 4,
+      "unlocks": "The Topology page, and the upstream walk that Network RCA uses to suppress downstream noise",
+      "summary": "Edges between devices. Both ends must compute the SAME direction or the RCA walk breaks.",
+      "requires": {
+        "allOf": [
+          {
+            "metric": "cno.dep.uses",
+            "dimensions": ["device.address", "upstream.address", "device.name", "upstream.name", "link_type", "discovery"]
+          }
+        ]
+      },
+      "dimensionValues": {
+        "discovery": ["lldp", "netbox", "manual"],
+        "link_type": ["data", "power"]
+      },
+      "note": "discovery records provenance and the app renders it: seen by both LLDP and the CMDB = confirmed; LLDP only = undocumented; CMDB only = documented but not advertised. Power links are always CMDB-only and are never reported as drift."
+    },
+    {
+      "id": "power",
+      "order": 5,
+      "unlocks": "UPS and PDU tiles, the power domain in Topology",
+      "summary": "Only for UPS and PDU devices.",
+      "requires": {
+        "anyOf": [
+          { "metric": "cno.power.ups.charge_pct",        "dimensions": ["device.address"] },
+          { "metric": "cno.power.ups.minutes_remaining", "dimensions": ["device.address"] },
+          { "metric": "cno.power.pdu.load",              "dimensions": ["device.address"] }
+        ],
+        "recommended": [
+          { "metric": "cno.power.ups.load_pct",       "dimensions": ["device.address"] },
+          { "metric": "cno.power.ups.battery_status", "dimensions": ["device.address"] },
+          { "metric": "cno.power.ups.output_watts",   "dimensions": ["device.address"] },
+          { "metric": "cno.power.pdu.status",         "dimensions": ["device.address"] }
+        ]
+      }
+    },
+    {
+      "id": "inventory",
+      "order": 6,
+      "unlocks": "CMDB reconciliation — what the system of record says versus what is actually there",
+      "summary": "Optional. Only relevant if you have a system of record to reconcile against.",
+      "requires": {
+        "allOf": [
+          { "metric": "cno.inv.device", "dimensions": ["device.name", "device.address", "device.role"] }
+        ]
+      }
+    }
+  ],
+
+  "logSources": [
+    {
+      "id": "flow",
+      "unlocks": "The NetFlow and Investigate pages",
+      "match": "isNotNull(flow.type)",
+      "requiredFields": ["flow.type", "flow.sampler.address"],
+      "note": "Flow arrives as logs, not metrics. This is the cost lever in the deployment — the app's look-back picker defaults tight (-2h) to bound Grail scan cost."
+    },
+    {
+      "id": "config",
+      "unlocks": "The Config & Compliance page",
+      "match": "log.source == \"network.config\"",
+      "requiredFields": ["log.source"]
+    },
+    {
+      "id": "lldp",
+      "unlocks": "Diagnostics for topology discovery",
+      "match": "log.source == \"network.lldp\"",
+      "requiredFields": ["log.source", "lldp.record"],
+      "note": "Only records where lldp.record == 'link' become edges. A 'device' record means the poll succeeded and found no neighbours — which is a different fact from a failed poll, and the app distinguishes them."
+    }
+  ],
+
+  "extensionNaming": {
+    "rule": "The extension NAME must match this pattern for the app to see its monitoring configurations.",
+    "pattern": "snmp|cisco|meraki|palo|fortinet|arista|juniper|f5|netflow|sflow|network",
+    "caseInsensitive": true,
+    "affects": [
+      "Whether the app counts a device as 'configured' rather than 'not monitored'",
+      "Whether retire can withdraw the device's monitoring configuration"
+    ],
+    "examples": {
+      "ok": ["custom:acme.snmp.wan", "custom:acme.network.edge"],
+      "invisible": ["custom:acme.wan", "custom:acme.edge"]
+    },
+    "note": "This does NOT affect whether metrics render — that is governed by the tiers above. An extension can fail this rule and still populate every page, while its devices read 'not monitored' on the Fleet diagnostic."
+  },
+
+  "pitfalls": [
+    {
+      "id": "empty-feature-sets",
+      "severity": "high",
+      "rule": "Always set featureSets explicitly on every monitoring configuration.",
+      "why": "Feature sets are opt-in and are NOT inherited across a version change. A configuration with featureSets: [] keeps that value silently and every gated metric stops — while the configuration continues to report status OK. The status field is not the test.",
+      "check": "The configuration's value.featureSets is a non-empty array."
+    },
+    {
+      "id": "interfaces-on-power-device",
+      "severity": "high",
+      "rule": "Never enable the Interfaces feature set on a UPS or PDU.",
+      "why": "Interfaces is the only table subgroup and therefore the only thing issuing SNMP GetBulk. UPS and PDU management cards answer GetNext but never GetBulk, producing a 15-second timeout every poll and a configuration permanently in ERROR. Losing the interface table on a UPS costs nothing — cno.device.uptime is ungated, so it still appears in the fleet.",
+      "check": "A configuration whose devices are UPS or PDU lists only 'UPS power' or 'PDU power'."
+    },
+    {
+      "id": "ups-battery-voltage-blind",
+      "severity": "medium",
+      "rule": "Leave 'UPS battery voltage' off unless the device is confirmed to implement it.",
+      "why": "It is optional in RFC 1628. On an all-or-nothing agent a single unimplemented OID makes the WHOLE request return noSuchName, killing every other power metric in the same request. Measured on a CyberPower UPS: 10 OIDs returned nothing; the same batch minus one returned 9 of 9 in 9 ms.",
+      "check": "'UPS battery voltage' is absent unless explicitly verified."
+    },
+    {
+      "id": "configuration-pins-version",
+      "severity": "medium",
+      "rule": "After an upgrade, check the version on each monitoring CONFIGURATION, not just the environment.",
+      "why": "The version that polls is the one on the configuration. An extension can sit active at one version while every device is still polled by an older one, indefinitely. Uploading a new bundle changes nothing on its own.",
+      "check": "pgrep -af <extension> on the ActiveGate shows the venv path actually in use."
+    },
+    {
+      "id": "multi-aggregate-timeseries",
+      "severity": "high",
+      "rule": "Never use a multi-aggregate timeseries { a=count(X), b=count(Y) } when a metric may be empty.",
+      "why": "That form inner-joins on the by-dimensions, so a single metric with no data drops every other column. This has bitten this codebase four times, including in the panel whose entire purpose was to report metrics with no data. Use append instead.",
+      "check": "Queries that combine metrics use `| append [ ... ]`."
+    },
+    {
+      "id": "lldp-via-snmp-feature-set",
+      "severity": "high",
+      "rule": "Do not use the SNMP extension's 'LLDP topology' feature set. Use the controlplane extension.",
+      "why": "The declarative SNMP datasource decodes binary OCTET STRINGs as text, and lldpRemChassisId is a MAC address. It arrives mangled, which destroys the chassis-id join key that is the entire point of the group. It is also expensive: one 48-port access switch can advertise 40+ neighbours every 15 minutes.",
+      "check": "'LLDP topology' is absent from every configuration's featureSets."
+    }
+  ]
+}

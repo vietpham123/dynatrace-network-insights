@@ -1,0 +1,615 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Extensions — setup and configuration</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  :root{
+    --bg:#f5f7fa; --surface:#ffffff; --surface-2:#eef1f6; --ink:#141b26; --muted:#586376;
+    --border:#e0e5ee; --accent:#0b7c8c; --accent-ink:#0b7c8c; --accent-soft:#dcf1f4;
+    --req:#127a4b; --req-soft:#dcefe4; --opt:#a25a06; --opt-soft:#f6e9d8;
+    --alert:#b02a37; --alert-soft:#f6dfe1; --code:#0d3a42;
+    --radius:12px; --maxw:900px;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0d1219; --surface:#151c26; --surface-2:#1b2430; --ink:#e7edf5; --muted:#93a1b5;
+      --border:#26303d; --accent:#2fc4d8; --accent-ink:#57d3e4; --accent-soft:#0e2b31;
+      --req:#3fce8e; --req-soft:#10281d; --opt:#efb457; --opt-soft:#2c2211;
+      --alert:#f4818d; --alert-soft:#2c1417; --code:#a9e7f0;
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#f5f7fa; --surface:#ffffff; --surface-2:#eef1f6; --ink:#141b26; --muted:#586376;
+    --border:#e0e5ee; --accent:#0b7c8c; --accent-ink:#0b7c8c; --accent-soft:#dcf1f4;
+    --req:#127a4b; --req-soft:#dcefe4; --opt:#a25a06; --opt-soft:#f6e9d8;
+    --alert:#b02a37; --alert-soft:#f6dfe1; --code:#0d3a42;
+  }
+  :root[data-theme="dark"]{
+    --bg:#0d1219; --surface:#151c26; --surface-2:#1b2430; --ink:#e7edf5; --muted:#93a1b5;
+    --border:#26303d; --accent:#2fc4d8; --accent-ink:#57d3e4; --accent-soft:#0e2b31;
+    --req:#3fce8e; --req-soft:#10281d; --opt:#efb457; --opt-soft:#2c2211;
+    --alert:#f4818d; --alert-soft:#2c1417; --code:#a9e7f0;
+  }
+
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;
+    -webkit-font-smoothing:antialiased;margin:0;}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:40px 22px 80px;}
+  .wrap > section{margin-top:44px;}
+
+  a{color:var(--accent-ink);}
+  h1,h2,h3{line-height:1.2;text-wrap:balance;margin:0;}
+  h1{font-size:clamp(28px,5vw,40px);font-weight:800;letter-spacing:-.02em;}
+  h2{font-size:clamp(20px,3.4vw,25px);font-weight:750;letter-spacing:-.01em;
+    padding-bottom:10px;border-bottom:1px solid var(--border);margin-bottom:20px;}
+  h3{font-size:16px;font-weight:700;}
+  p{margin:12px 0;max-width:68ch;}
+  .lede{font-size:clamp(16px,2.4vw,19px);color:var(--muted);max-width:66ch;}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--accent-ink);font-weight:600;}
+  strong{font-weight:680;}
+  code{font-family:var(--mono);font-size:.9em;background:var(--surface-2);color:var(--code);
+    padding:1px 6px;border-radius:5px;border:1px solid var(--border);white-space:nowrap;}
+
+  /* hero */
+  .hero{padding-bottom:6px;}
+  .hero h1{margin-top:8px;}
+  .outcome{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px;}
+  .chip{font-size:13px;background:var(--surface);border:1px solid var(--border);
+    border-radius:999px;padding:6px 13px;color:var(--ink);font-weight:550;}
+  .chip b{color:var(--accent-ink);font-weight:700;}
+
+  /* flow diagram */
+  .flow{display:flex;flex-direction:column;gap:6px;align-items:stretch;margin:8px 0 4px;}
+  .node{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    padding:14px 16px;}
+  .node .k{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
+  .node .t{font-weight:700;font-size:15px;margin:3px 0 2px;}
+  .node .d{font-size:13px;color:var(--muted);line-height:1.45;}
+  .node.spine{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent-soft);}
+  .arrow{display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:20px;
+    line-height:1;height:16px;}
+  .arrow::after{content:"↓";}
+  .cap{font-size:13px;color:var(--muted);margin-top:14px;}
+  @media (min-width:760px){
+    .flow{flex-direction:row;align-items:stretch;gap:4px;}
+    .arrow{height:auto;width:26px;flex:0 0 26px;}
+    .arrow::after{content:"→";}
+  }
+
+  /* glossary */
+  .gloss{display:grid;grid-template-columns:1fr;gap:0;background:var(--surface);
+    border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+  .gloss div{display:grid;grid-template-columns:180px 1fr;gap:16px;padding:13px 18px;
+    border-top:1px solid var(--border);}
+  .gloss div:first-child{border-top:0;}
+  .gloss dt{font-weight:700;font-size:14px;}
+  .gloss dd{margin:0;color:var(--muted);font-size:14px;}
+  @media (max-width:560px){ .gloss div{grid-template-columns:1fr;gap:2px;} }
+
+  /* tiers + piece cards */
+  .tier{margin-top:26px;}
+  .tierhead{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:4px;}
+  .tierhead h3{font-size:15px;font-family:var(--mono);letter-spacing:.02em;text-transform:uppercase;color:var(--ink);}
+  .tierhead .sub{font-size:13px;color:var(--muted);}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:14px;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+    padding:16px 17px;display:flex;flex-direction:column;gap:7px;}
+  .card .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;}
+  .card h4{margin:0;font-size:15px;font-weight:700;}
+  .card .id{font-family:var(--mono);font-size:11.5px;color:var(--muted);margin-top:2px;word-break:break-all;}
+  .card p{margin:0;font-size:13.5px;max-width:none;}
+  .card .why{font-size:13.5px;color:var(--muted);border-left:2px solid var(--accent);padding-left:11px;}
+  .card .why b{color:var(--ink);font-weight:650;}
+  .card.spine{border-color:var(--accent);}
+
+  .tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
+    font-weight:700;padding:3px 8px;border-radius:6px;white-space:nowrap;flex:none;}
+  .tag.req{color:var(--req);background:var(--req-soft);}
+  .tag.opt{color:var(--opt);background:var(--opt-soft);}
+
+  /* steps */
+  .steps{display:flex;flex-direction:column;gap:2px;counter-reset:step;}
+  .phase{font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--accent-ink);font-weight:700;margin:22px 0 10px;}
+  .step{display:grid;grid-template-columns:34px 1fr;gap:14px;padding:14px 0;border-top:1px solid var(--border);}
+  .step:first-of-type{border-top:0;}
+  .step .n{counter-increment:step;font-family:var(--mono);font-weight:700;font-size:15px;color:var(--accent-ink);
+    background:var(--accent-soft);border-radius:8px;height:32px;display:flex;align-items:center;justify-content:center;}
+  .step .n::before{content:counter(step);}
+  .step h4{font-size:15.5px;font-weight:700;margin:4px 0 0;}
+  .step p{margin:7px 0 0;font-size:14px;}
+  pre.cmd{background:var(--surface-2);border:1px solid var(--border);border-radius:9px;
+    padding:12px 14px;overflow-x:auto;margin:11px 0 2px;}
+  pre.cmd code{background:none;border:0;padding:0;white-space:pre;color:var(--code);font-size:12.5px;line-height:1.7;display:block;}
+
+  /* callouts */
+  .callout{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);
+    border-radius:10px;padding:15px 18px;margin:18px 0;}
+  .callout.warn{border-left-color:var(--opt);}
+  .callout h4{margin:0 0 6px;font-size:14.5px;font-weight:700;}
+  .callout p{margin:6px 0 0;font-size:14px;}
+  .callout ul{margin:8px 0 0;padding-left:18px;}
+  .callout li{font-size:14px;margin:6px 0;color:var(--muted);}
+  .callout li b{color:var(--ink);}
+
+  /* verify */
+  .check{display:flex;gap:12px;padding:13px 0;border-top:1px solid var(--border);align-items:flex-start;}
+  .check:first-child{border-top:0;}
+  .check .mk{color:var(--req);font-weight:800;flex:none;font-family:var(--mono);}
+  .check .b{font-size:14px;}
+  .check .b b{font-weight:680;}
+  .check .b .how{color:var(--muted);}
+
+  footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--border);color:var(--muted);font-size:13px;}
+  /* additions for this guide */
+  .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px;}
+  .pill{font-family:var(--mono);font-size:11.5px;letter-spacing:.04em;background:var(--surface);
+    border:1px solid var(--border);border-radius:999px;padding:5px 12px;color:var(--muted);}
+  .callout.alert{border-left-color:var(--alert);}
+  .callout.alert h3{margin:0 0 6px;font-size:15px;font-weight:750;}
+  .callout.alert h4{color:var(--alert);}
+  table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--radius);overflow:hidden;margin:16px 0;font-size:14px;}
+  th,td{text-align:left;padding:11px 15px;border-top:1px solid var(--border);vertical-align:top;}
+  th{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700;
+    background:var(--surface-2);border-top:0;}
+  .scroll{overflow-x:auto;}
+  .say{background:var(--accent-soft);border-radius:10px;padding:13px 16px;margin:12px 0 2px;
+    display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:start;}
+  .say .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--accent-ink);font-weight:700;padding-top:3px;}
+  .say p{margin:0;font-size:14.5px;font-style:italic;max-width:60ch;}
+  .expect{display:grid;grid-template-columns:auto 1fr;gap:11px;margin:10px 0 2px;align-items:start;}
+  .expect .mk{color:var(--req);font-weight:800;font-family:var(--mono);font-size:14px;padding-top:1px;}
+  .expect p{margin:0;font-size:14px;}
+  .ifwrong{font-size:13.5px;color:var(--muted);border-left:2px solid var(--opt);padding-left:12px;
+    margin:11px 0 0;}
+  .ifwrong b{color:var(--ink);font-weight:650;}
+  .tok{font-family:var(--mono);background:var(--opt-soft);color:var(--opt);border:1px dashed var(--opt);
+    padding:1px 6px;border-radius:5px;font-size:.9em;font-weight:650;}
+  .never{color:var(--alert);font-weight:700;}
+  .hazard{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--alert);
+    border-radius:10px;padding:15px 18px;margin:14px 0;}
+  .hazard h4{margin:0 0 4px;font-size:15px;font-weight:700;}
+  .hazard .fix{font-size:13.5px;color:var(--muted);border-left:2px solid var(--req);padding-left:11px;margin-top:10px;}
+  .hazard .fix b{color:var(--ink);font-weight:650;}
+</style>
+</head>
+<body>
+<main class="wrap">
+
+<header class="hero">
+  <div class="eyebrow">Network Insights &middot; Guided setup</div>
+  <h1>Extensions &mdash; setup and configuration</h1>
+  <p class="lede">How to get data flowing: signing, uploading and activating the extensions, then
+     creating the monitoring configurations that actually poll your devices. This is the phase that
+     fills the app's empty pages &mdash; and unlike installing the app, this one does talk to your
+     network equipment.</p>
+  <div class="meta">
+    <span class="pill">half a day, first time</span>
+    <span class="pill">touches devices</span>
+    <span class="pill">needs a signing CA</span>
+  </div>
+</header>
+
+<div class="callout">
+  <h4>What an extension is, in one paragraph</h4>
+  <p>An extension is a small package that tells an <b>ActiveGate</b> what to poll and how to turn
+     the answers into metrics. It runs on the ActiveGate inside your network &mdash; not in the
+     Dynatrace tenant, and not on the devices. You upload it once, activate a version, then create
+     one or more <b>monitoring configurations</b> that say which devices to poll, with which
+     credentials, and which parts of the extension to switch on.</p>
+  <div class="say"><div class="lbl">Say</div>
+    <p>"Three separate things, and they trip people up because they sound alike: the extension is
+       the recipe, the version activation says which recipe is live, and the monitoring
+       configuration is the list of devices it applies to. All three have to be right."</p></div>
+</div>
+
+<div class="callout alert">
+  <h4>The order matters, and each step fails silently if the one before it was skipped</h4>
+  <p>Nothing here throws a helpful error. A missing CA gives you a configuration stuck at
+     <code>UNKNOWN</code>; a missing feature set gives you a configuration that reports
+     <b>OK while collecting nothing</b>. <b>Do the steps in order and verify each one before
+     building on it.</b></p>
+</div>
+
+<h2>Before you start</h2>
+<div class="cards">
+  <div class="card">
+    <div class="top"><div><h4>An ActiveGate with Extensions 2.0</h4></div><span class="tag req">Required</span></div>
+    <p>Installed inside the network, with SNMP reachability to the management addresses of the
+       devices you intend to poll.</p>
+    <div class="why">Extensions run <b>on the ActiveGate</b>. If it cannot reach a device, no amount
+      of configuration in the tenant will help.</div>
+  </div>
+  <div class="card">
+    <div class="top"><div><h4>An explicit ActiveGate group</h4></div><span class="tag req">Required</span></div>
+    <pre class="cmd"><code>sudo /opt/dynatrace/gateway/agctl group set <span class="tok">&lt;AG-GROUP&gt;</span>
+sudo systemctl restart dynatracegateway</code></pre>
+    <div class="why">A fresh ActiveGate reports its group as bare <code>default</code>, which does
+      <b>not</b> match a configuration scoped <code>ag_group-default</code>. This is the single most
+      common cause of a configuration that sits at <code>UNKNOWN</code> forever with no error.</div>
+  </div>
+  <div class="card">
+    <div class="top"><div><h4>A read-only SNMP credential</h4></div><span class="tag req">Required</span></div>
+    <p>v2c community string or v3 credentials, stored in the Dynatrace <b>Credential Vault</b>.</p>
+    <div class="why">Reference it by vault ID. Never paste a community string into a ticket or a
+      spreadsheet &mdash; it will outlive the change window.</div>
+  </div>
+  <div class="card">
+    <div class="top"><div><h4>A signing CA &mdash; one clean one</h4></div><span class="tag req">Required</span></div>
+    <p>One certificate authority for this project, which you will create in step 2.</p>
+    <div class="why">A <b>broken or expired CA in the vault can poison the whole cluster&rarr;AG
+      certificate sync</b>, so the ActiveGate loads zero custom CAs and every custom extension fails
+      signature verification. Keep the vault clean; delete dead certs.</div>
+  </div>
+  <div class="card">
+    <div class="top"><div><h4>The dt-cli tool</h4></div><span class="tag req">Required</span></div>
+    <pre class="cmd"><code>pip install dt-cli</code></pre>
+    <div class="why">Provides the <code>dt</code> command used to generate certificates and to
+      assemble, sign and upload the extension bundle.</div>
+  </div>
+  <div class="card">
+    <div class="top"><div><h4>Two different tokens</h4></div><span class="tag req">Required</span></div>
+    <p>They are <b>not interchangeable</b>, and this catches everyone once &mdash; see the token
+       box below.</p>
+    <div class="why">The platform token that uploads the bundle does <b>not</b> carry the scope
+      needed to activate a version. Different scope families entirely.</div>
+  </div>
+</div>
+
+<div class="callout warn">
+  <h4>The two tokens, and the two domains</h4>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>For</th><th>Token</th><th>Scope</th><th>Domain</th></tr></thead>
+    <tbody>
+      <tr><td>Uploading the signed bundle</td><td>platform token</td><td>extension upload</td>
+          <td><code>&lt;TENANT&gt;.apps.dynatrace.com</code></td></tr>
+      <tr><td>Activating a version, creating configurations</td><td>classic API token
+          <code>dt0c01</code></td><td><code>environment-api:extensions:write</code>
+          (+ <code>:read</code> to see the before-state)</td>
+          <td><b><code>&lt;TENANT&gt;.dynatrace.com</code></b> &mdash; the environment domain,
+              <span class="never">not</span> <code>.apps</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p>Using the apps domain for the classic <code>/api/v2</code> calls returns confusing errors that
+     look like permission problems. They are not.</p>
+</div>
+
+<h2>Which extensions to deploy</h2>
+<p>Five are available. Start with <b>interfaces</b> &mdash; everything else is additive, and you can
+   add them later without redoing anything.</p>
+<div class="scroll">
+<table>
+  <thead><tr><th>Extension</th><th>What it gives you</th><th>Source folder</th></tr></thead>
+  <tbody>
+    <tr><td><code>custom:cno.network.interfaces</code></td>
+        <td><b>Start here.</b> Interface and device metrics &mdash; the core of the fleet view.</td>
+        <td><code>modules/snmp-interfaces-extension/</code></td></tr>
+    <tr><td><code>custom:cno.network.controlplane</code></td>
+        <td>LLDP topology discovery, BGP/OSPF adjacency. <b>Produces</b> the topology edges.</td>
+        <td><code>modules/controlplane-extension/</code></td></tr>
+    <tr><td><code>custom:cno.network.dependency</code></td>
+        <td><b>Consumes</b> those edges and materialises them as Smartscape topology.</td>
+        <td><code>modules/network-dependency-extension/</code></td></tr>
+    <tr><td><code>custom:cno.network.compliance</code></td>
+        <td>Configuration capture and golden-config drift.</td>
+        <td><b><code>modules/oxidized-extension/</code></b></td></tr>
+    <tr><td><code>custom:cno.network.netbox</code></td>
+        <td>Inventory and power topology from NetBox, if you use it.</td>
+        <td><code>modules/netbox-extension/</code></td></tr>
+  </tbody>
+</table>
+</div>
+<div class="callout warn">
+  <p><b>Two traps in that table.</b> The compliance extension's folder is named after Oxidized, not
+     after the extension &mdash; there is no <code>modules/compliance-extension/</code>. And
+     <b>controlplane and dependency are two halves of one feature</b>: deploy only one and the
+     topology page sits empty with nothing to blame.</p>
+</div>
+
+<h2>The eight steps</h2>
+<div class="steps">
+
+  <div class="step">
+    <div class="n"></div>
+    <div>
+      <h4>Get the extension source</h4>
+      <p>Two ways, whichever suits:</p>
+      <ul>
+        <li><b>From the app</b> &mdash; the <b>Configuration</b> page offers each extension's source
+            as a download. Nothing else to clone.</li>
+        <li><b>From the repository</b> &mdash; the <code>modules/</code> folders listed above.</li>
+      </ul>
+      <div class="say"><div class="lbl">Say</div>
+        <p>"We ship the source rather than a signed binary on purpose &mdash; you sign it with your
+           own certificate authority, so nothing runs in your environment that you did not sign
+           yourself."</p></div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="n"></div>
+    <div>
+      <h4>Create the signing certificates</h4>
+      <pre class="cmd"><code>dt ext gencerts --ca-cert ca.pem --ca-key ca.key \
+                --dev-cert dev.pem --dev-key dev.key \
+                --no-ca-passphrase --no-dev-passphrase
+
+cat dev.pem dev.key &gt; dev_fused.pem</code></pre>
+      <div class="expect"><div class="mk">&check;</div>
+        <p>Four files, plus the fused one. <b>Certificate first, then key</b> &mdash; that order
+           matters and reversing it fails later, obscurely.</p></div>
+      <p>Prove the chain is sound before going anywhere near distribution:</p>
+      <pre class="cmd"><code>openssl verify -CAfile ca.pem dev.pem</code></pre>
+      <div class="expect"><div class="mk">&check;</div>
+        <p><code>dev.pem: OK</code></p></div>
+      <p class="ifwrong"><b>Do this now, not later.</b> It separates a chain-packaging problem from
+         a trust-distribution problem, and those two look identical from the ActiveGate's error
+         messages.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="n"></div>
+    <div>
+      <h4>Trust the CA in the tenant</h4>
+      <p>In Dynatrace: <b>Settings &rarr; Credential vault &rarr; Certificate</b>, scope
+         <b>Extensions</b>. Upload <code>ca.pem</code> &mdash; the CA, not the developer cert.</p>
+      <div class="callout warn" style="margin:11px 0 0">
+        <p><b>Use the UI for this one.</b> The credentials REST API rejects passwordless public
+           certificates, so scripting this step fails for a reason that has nothing to do with your
+           certificate.</p>
+      </div>
+      <div class="say"><div class="lbl">Say</div>
+        <p>"This is the first of two places the CA has to be trusted. Only this one is obvious,
+           and missing the second is the classic day-one failure."</p></div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="n"></div>
+    <div>
+      <h4>Confirm the ActiveGate has picked it up</h4>
+      <p>The ActiveGate syncs trusted extension CAs from the tenant into its own store. Nothing to
+         run &mdash; but it is a genuinely separate trust stage, and it is where deployments stall.</p>
+      <div class="scroll">
+      <table>
+        <thead><tr><th>If you see</th><th>It means</th></tr></thead>
+        <tbody>
+          <tr><td><code>SignatureVerifier: unable to get local issuer certificate</code></td>
+              <td>The ActiveGate cannot build the chain &mdash; the CA has not reached its store.</td></tr>
+          <tr><td><code>Cannot extract extension &hellip; checking signature failed</code></td>
+              <td>Trusted in the tenant, not on the ActiveGate. The second of the two places.</td></tr>
+        </tbody>
+      </table>
+      </div>
+      <p class="ifwrong"><b>The reliable recovery for a stuck trust store is a clean uninstall and
+         reinstall of the ActiveGate</b> &mdash; a freshly installed one syncs the bundle on first
+         boot. Blast radius is low: entities, metrics already in Grail, and OneAgent are all
+         independent of any single ActiveGate.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="n"></div>
+    <div>
+      <h4>Build, sign and upload</h4>
+      <pre class="cmd"><code>dt ext assemble --source extension --output ext.zip --force
+dt ext sign --src ext.zip --output bundle.zip --key dev_fused.pem --force
+dt ext upload --tenant-url "$DT_URL" --api-token "$TOK" bundle.zip</code></pre>
+      <div class="expect"><div class="mk">&check;</div>
+        <p>The upload reports the extension name and version it accepted.</p></div>
+      <div class="say"><div class="lbl">Say</div>
+        <p>"Uploading does not turn anything on. The extension is now available in your tenant and
+           is polling absolutely nothing &mdash; that is the next two steps."</p></div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="n"></div>
+    <div>
+      <h4>Activate the version</h4>
+      <p>The active version is a <b>single environment-wide setting</b>. One call moves every
+         monitoring configuration of that extension at once, however many there are.</p>
+      <pre class="cmd"><code>PUT https://<span class="tok">&lt;TENANT&gt;</span>.dynatrace.com/api/v2/extensions/&lt;name&gt;/environmentConfiguration
+{"version": "x.y.z"}</code></pre>
+      <p>Classic <code>dt0c01</code> token, <code>environment-api:extensions:write</code>, on the
+         environment domain.</p>
+      <div class="callout alert" style="margin:12px 0 0">
+        <h4>On an existing deployment, this is a migration &mdash; not an upgrade</h4>
+        <p>Moving <code>custom:cno.network.interfaces</code> to <b>0.0.14 or above</b> stops every
+           pre-existing configuration collecting <code>cno.if.*</code>,
+           <code>cno.device.cpu_usage</code>, memory and <code>cno.power.*</code> &mdash;
+           <b>while every one of them keeps reporting status OK</b>. 0.0.14 made each OID group an
+           opt-in feature set, and activation does not re-derive a stored empty
+           <code>featureSets</code> value.</p>
+        <p><b>The status field is not the test.</b> Snapshot what each configuration collects before
+           you activate. On a first, clean deployment none of this applies.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="n"></div>
+    <div>
+      <h4>Create the monitoring configurations</h4>
+      <pre class="cmd"><code>POST https://<span class="tok">&lt;TENANT&gt;</span>.dynatrace.com/api/v2/extensions/&lt;name&gt;/monitoringConfigurations
+[{ "scope": "ag_group-<span class="tok">&lt;AG-GROUP&gt;</span>", "value": { &hellip;, "featureSets": ["Interfaces"] } }]</code></pre>
+      <p>Three things to get right, all of them silent when wrong:</p>
+      <ul>
+        <li><b>Scope it to the ActiveGate group</b> &mdash; <code>ag_group-&lt;name&gt;</code>, so the
+            poll runs only where it can reach the devices.</li>
+        <li><b>Set <code>featureSets</code> explicitly</b> on every configuration. Always. See the
+            table below.</li>
+        <li><b>Group by device class, not by site</b> &mdash; feature sets are per-configuration, and
+            device class is what decides them.</li>
+      </ul>
+      <div class="say"><div class="lbl">Say</div>
+        <p>"We group these by what the device <em>is</em>, not where it lives, because the feature
+           sets differ by device type. A site with switches and a UPS in it needs two
+           configurations, not one."</p></div>
+      <p>Addresses are <b>CIDR</b> in autodiscovery (<code>10.0.0.5/32</code>, not a bare IP). For
+         per-device community strings, use one configuration group per device; a single shared
+         community can cover a whole subnet scan.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="n"></div>
+    <div>
+      <h4>Verify each layer before building on it</h4>
+      <p>Configuration status <code>UNKNOWN</code> immediately after creation is normal and clears
+         on the first poll. <code>UNKNOWN</code> <b>forever with no error</b> is almost always the
+         ActiveGate group or the CA trust.</p>
+      <pre class="cmd"><code>// devices reporting at all
+timeseries n=count(cno.device.uptime), from:-10m, by:{`device.address`}
+| fieldsAdd s=arraySum(n) | filter s&gt;0 | summarize devices=count()
+
+// interfaces reporting
+timeseries n=count(cno.if.oper_status), from:-10m, by:{`device.address`,if_index}
+| fieldsAdd s=arraySum(n) | filter s&gt;0 | summarize ifaces=count()
+
+// LLDP topology — only 'link' records are edges;
+// 'device' records mean it polled fine and found no neighbours
+fetch logs, from:-30m | filter `log.source`=="network.lldp"
+| summarize c=count(), by:{`lldp.record`}
+
+// topology edges, and where each one came from
+timeseries e=count(cno.dep.uses), from:-30m, by:{discovery,link_type}
+| fieldsAdd n=arraySum(e) | filter n&gt;0 | fields discovery, link_type, n</code></pre>
+      <div class="expect"><div class="mk">&check;</div>
+        <p>A non-zero device count, then a non-zero interface count. In that order &mdash; interfaces
+           without devices means something is wrong with the query, not the poll.</p></div>
+    </div>
+  </div>
+
+</div>
+
+<h2>Feature sets &mdash; set these explicitly, every time</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>Device class</th><th>Feature sets</th><th>Never</th></tr></thead>
+  <tbody>
+    <tr><td>Switch / router / WAN edge / access point</td>
+        <td><code>Interfaces</code> &mdash; plus <code>Cisco device health</code> on Cisco</td><td>&mdash;</td></tr>
+    <tr><td><b>UPS</b></td><td><code>UPS power</code></td>
+        <td><span class="never">never <code>Interfaces</code></span></td></tr>
+    <tr><td><b>PDU</b></td><td><code>PDU power</code></td>
+        <td><span class="never">never <code>Interfaces</code></span></td></tr>
+  </tbody>
+</table>
+</div>
+<div class="callout warn">
+  <h4>Why a UPS must never get <code>Interfaces</code></h4>
+  <p><code>Interfaces</code> is the only feature set that issues SNMP <b>GetBulk</b>. Management
+     cards in a UPS or PDU answer <code>GetNext</code> in milliseconds and <b>never answer GetBulk at
+     all</b> &mdash; so enabling it produces a 15-second timeout every minute, a configuration
+     permanently in ERROR, and no power data at all.</p>
+  <p>Losing the interface table on a UPS costs you nothing: <code>cno.device.uptime</code> is not
+     gated behind a feature set, so the device still appears in the fleet.</p>
+  <p><b>Leave <code>UPS battery voltage</code> switched off</b> unless the device is confirmed to
+     implement it. It is optional in RFC 1628, and a <code>noSuchName</code> response kills every
+     other power metric in the same request.</p>
+</div>
+
+<h2>Four things that fail silently</h2>
+<p>None of these throws an error. Every one produces a plausible-looking wrong answer, which is why
+   they are worth reading before you deploy rather than after.</p>
+
+<div class="hazard">
+  <h4>1. Feature sets are not inherited across a version change</h4>
+  <p>A configuration with <code>featureSets: []</code> stays <code>[]</code> when moved to a new
+     version &mdash; no prompt, no warning. Every gated metric stops. The device still reports, so
+     nothing looks broken; you simply lose half the data.</p>
+  <div class="fix"><b>Set feature sets explicitly on every configuration, and prefer recreating
+    configurations over migrating them.</b></div>
+</div>
+
+<div class="hazard">
+  <h4>2. The version that polls is the one on the CONFIGURATION</h4>
+  <p>An extension can sit active at 0.0.14 in the environment while every device is still polled by
+     0.0.7, indefinitely, because the monitoring configuration pins its own version. Uploading a new
+     bundle changes nothing on its own.</p>
+  <div class="fix"><b>After any upgrade, check the version on each configuration &mdash; not just the
+    environment.</b></div>
+</div>
+
+<div class="hazard">
+  <h4>3. Entities are permanent, and identity is the management address</h4>
+  <p>A device entity cannot be deleted &mdash; the API returns <b>405</b> &mdash; and it never ages
+     out; entities with 90+ days of zero data are still listed. Identity keys on the management
+     address, so <b>renumbering a subnet orphans every device permanently</b>: the old addresses keep
+     their entities forever and the new ones arrive as strangers. Two devices sharing an address
+     collapse into one entity.</p>
+  <div class="fix"><b>Settle addressing before onboarding at scale.</b> If any part of the estate
+    reuses IP space &mdash; routine after a merger, and normal for DR pairs &mdash; resolve it first.
+    This is the only decision here that cannot be undone.</div>
+</div>
+
+<div class="hazard">
+  <h4>4. Secrets come back masked &mdash; and the mask round-trips safely</h4>
+  <p>A <code>GET</code> returns secrets masked (<code>***&hellip;***</code>), so editing one field
+     looks like it will write the literal mask back as the community string. <b>Measured: it does
+     not break polling.</b> The platform recognises the mask and preserves the stored secret &mdash;
+     tested with an unchanged <code>PUT</code> and with a field change carrying eleven masked
+     communities on a live 11-device configuration, sustained over ten minutes.</p>
+  <div class="fix">Re-supplying secrets from your own source of truth is still the better habit
+    &mdash; it does not depend on undocumented behaviour. But it is a preference, <b>not a rescue</b>.
+    Tested on the classic <code>/api/v2</code> endpoint only.</div>
+</div>
+
+<h2>If something goes wrong</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>What you see</th><th>What it means</th></tr></thead>
+  <tbody>
+    <tr><td>Configuration sits at <code>UNKNOWN</code> forever, no error</td>
+        <td>ActiveGate group mismatch, or the CA is not in the ActiveGate trust store. Both are silent.</td></tr>
+    <tr><td><code>checking signature failed</code></td>
+        <td>CA trusted in the tenant but not on the ActiveGate.</td></tr>
+    <tr><td><code>unable to get local issuer certificate</code></td>
+        <td>The chain cannot be built. Run the <code>openssl verify</code> from step 2 first.</td></tr>
+    <tr><td>Status OK, but only <code>cno.device.uptime</code> arrives</td>
+        <td>Empty <code>featureSets</code>. The status field is not the test.</td></tr>
+    <tr><td>A UPS or PDU configuration is permanently in ERROR</td>
+        <td><code>Interfaces</code> enabled on a management card that cannot answer GetBulk.</td></tr>
+    <tr><td>Topology page empty, devices reporting fine</td>
+        <td>Only one half of the topology pair deployed. It needs controlplane <b>and</b> dependency.</td></tr>
+    <tr><td>LLDP polls fine, zero neighbours</td>
+        <td>The devices are not advertising. On Cisco IOS, LLDP is <b>off by default</b> &mdash;
+            <code>lldp run</code>. No monitoring product can discover an adjacency nobody advertises.</td></tr>
+    <tr><td>Classic API calls fail oddly</td>
+        <td>Wrong domain. <code>/api/v2</code> lives on the environment domain, not <code>.apps</code>.</td></tr>
+    <tr><td>Every custom extension fails signature at once</td>
+        <td>A broken or expired CA in the vault has poisoned the certificate sync. Clean the vault.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Then, in the app</h2>
+<p>Once devices are reporting, open the app and <b>assign sites and roles</b> on the Devices page.
+   Do it during onboarding rather than after &mdash; site scoping is the whole scale strategy, and
+   <b>Unassigned</b> is the one bucket no view can help with.</p>
+
+<footer>
+  <p>Network Insights &mdash; extension setup and configuration. Replace
+     <span class="tok">&lt;TENANT&gt;</span> and <span class="tok">&lt;AG-GROUP&gt;</span> before
+     sharing. Procedures and failure modes verified against a running deployment; the masked-secret
+     and feature-set behaviours were measured, not recalled. Companion documents:
+     <code>pre-deployment-brief.html</code> for the decisions to make first,
+     <code>customer-install-walkthrough.html</code> for installing the app itself, and
+     <code>docs/METRIC-CONTRACT.md</code> if you intend to feed the app from your own extensions.</p>
+</footer>
+
+</main>
+</body>
+</html>

@@ -1,0 +1,234 @@
+{
+  "enums": {
+    "snmpVersion": {
+      "displayName": "SNMP version",
+      "description": "",
+      "documentation": "",
+      "type": "enum",
+      "items": [
+        {
+          "value": "v2c",
+          "displayName": "v2c (community)"
+        },
+        {
+          "value": "v3",
+          "displayName": "v3 (USM)"
+        }
+      ]
+    },
+    "securityLevel": {
+      "displayName": "Security level",
+      "description": "",
+      "documentation": "",
+      "type": "enum",
+      "items": [
+        {
+          "value": "noAuthNoPriv",
+          "displayName": "noAuthNoPriv"
+        },
+        {
+          "value": "authNoPriv",
+          "displayName": "authNoPriv"
+        },
+        {
+          "value": "authPriv",
+          "displayName": "authPriv"
+        }
+      ]
+    },
+    "authProtocol": {
+      "displayName": "Authentication protocol",
+      "description": "",
+      "documentation": "",
+      "type": "enum",
+      "items": [
+        {
+          "value": "md5",
+          "displayName": "MD5"
+        },
+        {
+          "value": "sha",
+          "displayName": "SHA-1"
+        },
+        {
+          "value": "sha256",
+          "displayName": "SHA-256"
+        },
+        {
+          "value": "sha512",
+          "displayName": "SHA-512"
+        }
+      ]
+    },
+    "privProtocol": {
+      "displayName": "Privacy protocol",
+      "description": "",
+      "documentation": "",
+      "type": "enum",
+      "items": [
+        {
+          "value": "des",
+          "displayName": "DES"
+        },
+        {
+          "value": "aes",
+          "displayName": "AES-128"
+        },
+        {
+          "value": "aes192",
+          "displayName": "AES-192"
+        },
+        {
+          "value": "aes256",
+          "displayName": "AES-256"
+        }
+      ]
+    }
+  },
+  "types": {
+    "pythonRemote": {
+      "type": "object",
+      "displayName": "LLDP topology",
+      "properties": {
+        "deviceList": {
+          "displayName": "Devices",
+          "description": "Management addresses to walk, comma- or newline-separated. Optional :port (default 161). Lines starting with # are ignored.",
+          "type": "text",
+          "subType": "multiline",
+          "nullable": false,
+          "maxLength": 20000,
+          "default": ""
+        },
+        "collectLldp": {
+          "displayName": "Collect LLDP topology",
+          "description": "Neighbour discovery: who is cabled to what, and which neighbours are unmanaged. Feeds the Topology view and the RCA dependency graph.",
+          "type": "boolean",
+          "nullable": false,
+          "default": true
+        },
+        "collectRouting": {
+          "displayName": "Collect routing adjacencies (BGP / OSPF)",
+          "description": "Control-plane state: BGP peer sessions and OSPF neighbours. Catches the case an interface cannot \u2014 a peering down while the link stays up and traffic blackholes. OFF by default; enable on routers and WAN edges, not on access switches.",
+          "type": "boolean",
+          "nullable": false,
+          "default": false
+        },
+        "excludeEndpoints": {
+          "displayName": "Exclude endpoints (recommended)",
+          "description": "Drop neighbours that identify themselves as endpoints (workstations, IP phones) via the LLDP capability bitmap. This is where LLDP volume concentrates and it is what crowds topology views; network teams manage endpoints with dedicated tooling. Neighbours that advertise NO capabilities are kept, never dropped \u2014 so a switch is never silently hidden.",
+          "type": "boolean",
+          "nullable": false,
+          "default": true
+        },
+        "intervalSeconds": {
+          "displayName": "Poll interval (seconds)",
+          "description": "Topology changes on a work-order timescale. 15 minutes is the sensible floor; polling faster mostly buys cost.",
+          "type": "integer",
+          "nullable": false,
+          "default": 900,
+          "minimum": 60,
+          "maximum": 86400
+        },
+        "version": {
+          "displayName": "SNMP version",
+          "description": "",
+          "type": {
+            "$ref": "#/enums/snmpVersion"
+          },
+          "nullable": false,
+          "default": "v2c"
+        },
+        "community": {
+          "displayName": "Community string (v2c)",
+          "description": "Read-only community. Leave empty when using v3.",
+          "type": "secret",
+          "nullable": true,
+          "maxLength": 500
+        },
+        "userName": {
+          "displayName": "User name (v3)",
+          "description": "USM user. Leave empty when using v2c.",
+          "type": "text",
+          "nullable": true,
+          "maxLength": 200
+        },
+        "securityLevel": {
+          "displayName": "Security level (v3)",
+          "description": "",
+          "type": {
+            "$ref": "#/enums/securityLevel"
+          },
+          "nullable": false,
+          "default": "authPriv"
+        },
+        "authProtocol": {
+          "displayName": "Authentication protocol (v3)",
+          "description": "",
+          "type": {
+            "$ref": "#/enums/authProtocol"
+          },
+          "nullable": false,
+          "default": "sha"
+        },
+        "authPassword": {
+          "displayName": "Authentication passphrase (v3)",
+          "description": "",
+          "type": "secret",
+          "nullable": true,
+          "maxLength": 500
+        },
+        "privProtocol": {
+          "displayName": "Privacy protocol (v3)",
+          "description": "",
+          "type": {
+            "$ref": "#/enums/privProtocol"
+          },
+          "nullable": false,
+          "default": "aes"
+        },
+        "privPassword": {
+          "displayName": "Privacy passphrase (v3)",
+          "description": "",
+          "type": "secret",
+          "nullable": true,
+          "maxLength": 500
+        },
+        "timeoutSeconds": {
+          "displayName": "Timeout (seconds)",
+          "description": "",
+          "type": "integer",
+          "nullable": false,
+          "default": 5,
+          "minimum": 1,
+          "maximum": 60
+        },
+        "retries": {
+          "displayName": "Retries",
+          "description": "",
+          "type": "integer",
+          "nullable": false,
+          "default": 2,
+          "minimum": 0,
+          "maximum": 10
+        },
+        "maxRepetitions": {
+          "displayName": "GetBulk max-repetitions",
+          "description": "Varbinds requested per GetBulk. Defaults to a deliberately gentle 10: an older Netgear GSM7248V2 in the validation lab returns a GetBulk timeout on the LLDP scalars to the declarative datasource, so mixed-age estates are safer starting low. Raise it for speed on modern fleets.",
+          "type": "integer",
+          "nullable": false,
+          "default": 10,
+          "minimum": 1,
+          "maximum": 100
+        }
+      }
+    }
+  },
+  "properties": {
+    "pythonRemote": {
+      "displayName": "LLDP topology",
+      "type": {
+        "$ref": "#/types/pythonRemote"
+      }
+    }
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "types": {
+    "pythonRemote": {
+      "type": "object",
+      "displayName": "NetBox source",
+      "properties": {
+        "netboxUrl": {
+          "displayName": "NetBox URL",
+          "description": "Base URL of your NetBox instance, e.g. https://netbox.example.com",
+          "type": "text",
+          "nullable": false,
+          "maxLength": 500,
+          "default": "http://localhost:8000"
+        },
+        "netboxToken": {
+          "displayName": "NetBox API token",
+          "description": "Read access to /dcim (devices, cables)",
+          "type": "secret",
+          "nullable": false,
+          "maxLength": 500,
+          "default": ""
+        },
+        "dtApiUrl": {
+          "displayName": "Dynatrace API URL (optional)",
+          "description": "Enables host->device edges (cno.dep.uses_network), which need a host-entity lookup. Leave blank to skip.",
+          "type": "text",
+          "nullable": true,
+          "maxLength": 500
+        },
+        "dtApiToken": {
+          "displayName": "Dynatrace API token, scope entities.read (optional)",
+          "type": "secret",
+          "nullable": true,
+          "maxLength": 500
+        },
+        "intervalSeconds": {
+          "displayName": "Poll interval (seconds)",
+          "type": "integer",
+          "nullable": false,
+          "default": 60,
+          "minimum": 30,
+          "maximum": 3600
+        },
+        "emitDataLinks": {
+          "displayName": "Emit device\u2194device data links from NetBox cabling",
+          "description": "Defaults ON \u2014 there is currently no packaged, production-deployable live-LLDP extension, so NetBox's declared cabling is the only production-ready source of device\u2194device topology. Turn this OFF only where a genuine live-LLDP (or equivalent) source is already discovering the same devices \u2014 e.g. the internal lab (emit_lldp.py) \u2014 since running both against the same devices double-reports each link from two sources with independently-derived direction, which can disagree. Power links (link_type=power) and host\u2192device edges are unaffected \u2014 NetBox is the only source for those and always emits them.",
+          "type": "boolean",
+          "nullable": false,
+          "default": true
+        }
+      }
+    }
+  },
+  "properties": {
+    "pythonRemote": {
+      "displayName": "NetBox source",
+      "type": {
+        "$ref": "#/types/pythonRemote"
+      }
+    }
+  }
+}

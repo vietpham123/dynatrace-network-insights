@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Installing Network Insights — step by step</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  :root{
+    --bg:#f5f7fa; --surface:#ffffff; --surface-2:#eef1f6; --ink:#141b26; --muted:#586376;
+    --border:#e0e5ee; --accent:#0b7c8c; --accent-ink:#0b7c8c; --accent-soft:#dcf1f4;
+    --req:#127a4b; --req-soft:#dcefe4; --opt:#a25a06; --opt-soft:#f6e9d8;
+    --alert:#b02a37; --alert-soft:#f6dfe1; --code:#0d3a42;
+    --radius:12px; --maxw:900px;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0d1219; --surface:#151c26; --surface-2:#1b2430; --ink:#e7edf5; --muted:#93a1b5;
+      --border:#26303d; --accent:#2fc4d8; --accent-ink:#57d3e4; --accent-soft:#0e2b31;
+      --req:#3fce8e; --req-soft:#10281d; --opt:#efb457; --opt-soft:#2c2211;
+      --alert:#f4818d; --alert-soft:#2c1417; --code:#a9e7f0;
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#f5f7fa; --surface:#ffffff; --surface-2:#eef1f6; --ink:#141b26; --muted:#586376;
+    --border:#e0e5ee; --accent:#0b7c8c; --accent-ink:#0b7c8c; --accent-soft:#dcf1f4;
+    --req:#127a4b; --req-soft:#dcefe4; --opt:#a25a06; --opt-soft:#f6e9d8;
+    --alert:#b02a37; --alert-soft:#f6dfe1; --code:#0d3a42;
+  }
+  :root[data-theme="dark"]{
+    --bg:#0d1219; --surface:#151c26; --surface-2:#1b2430; --ink:#e7edf5; --muted:#93a1b5;
+    --border:#26303d; --accent:#2fc4d8; --accent-ink:#57d3e4; --accent-soft:#0e2b31;
+    --req:#3fce8e; --req-soft:#10281d; --opt:#efb457; --opt-soft:#2c2211;
+    --alert:#f4818d; --alert-soft:#2c1417; --code:#a9e7f0;
+  }
+
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.6;
+    -webkit-font-smoothing:antialiased;margin:0;}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:40px 22px 80px;}
+  .wrap > section{margin-top:44px;}
+
+  a{color:var(--accent-ink);}
+  h1,h2,h3{line-height:1.2;text-wrap:balance;margin:0;}
+  h1{font-size:clamp(28px,5vw,40px);font-weight:800;letter-spacing:-.02em;}
+  h2{font-size:clamp(20px,3.4vw,25px);font-weight:750;letter-spacing:-.01em;
+    padding-bottom:10px;border-bottom:1px solid var(--border);margin-bottom:20px;}
+  h3{font-size:16px;font-weight:700;}
+  p{margin:12px 0;max-width:68ch;}
+  .lede{font-size:clamp(16px,2.4vw,19px);color:var(--muted);max-width:66ch;}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--accent-ink);font-weight:600;}
+  strong{font-weight:680;}
+  code{font-family:var(--mono);font-size:.9em;background:var(--surface-2);color:var(--code);
+    padding:1px 6px;border-radius:5px;border:1px solid var(--border);white-space:nowrap;}
+
+  /* hero */
+  .hero{padding-bottom:6px;}
+  .hero h1{margin-top:8px;}
+  .outcome{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px;}
+  .chip{font-size:13px;background:var(--surface);border:1px solid var(--border);
+    border-radius:999px;padding:6px 13px;color:var(--ink);font-weight:550;}
+  .chip b{color:var(--accent-ink);font-weight:700;}
+
+  /* flow diagram */
+  .flow{display:flex;flex-direction:column;gap:6px;align-items:stretch;margin:8px 0 4px;}
+  .node{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    padding:14px 16px;}
+  .node .k{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
+  .node .t{font-weight:700;font-size:15px;margin:3px 0 2px;}
+  .node .d{font-size:13px;color:var(--muted);line-height:1.45;}
+  .node.spine{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent-soft);}
+  .arrow{display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:20px;
+    line-height:1;height:16px;}
+  .arrow::after{content:"↓";}
+  .cap{font-size:13px;color:var(--muted);margin-top:14px;}
+  @media (min-width:760px){
+    .flow{flex-direction:row;align-items:stretch;gap:4px;}
+    .arrow{height:auto;width:26px;flex:0 0 26px;}
+    .arrow::after{content:"→";}
+  }
+
+  /* glossary */
+  .gloss{display:grid;grid-template-columns:1fr;gap:0;background:var(--surface);
+    border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+  .gloss div{display:grid;grid-template-columns:180px 1fr;gap:16px;padding:13px 18px;
+    border-top:1px solid var(--border);}
+  .gloss div:first-child{border-top:0;}
+  .gloss dt{font-weight:700;font-size:14px;}
+  .gloss dd{margin:0;color:var(--muted);font-size:14px;}
+  @media (max-width:560px){ .gloss div{grid-template-columns:1fr;gap:2px;} }
+
+  /* tiers + piece cards */
+  .tier{margin-top:26px;}
+  .tierhead{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:4px;}
+  .tierhead h3{font-size:15px;font-family:var(--mono);letter-spacing:.02em;text-transform:uppercase;color:var(--ink);}
+  .tierhead .sub{font-size:13px;color:var(--muted);}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:14px;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+    padding:16px 17px;display:flex;flex-direction:column;gap:7px;}
+  .card .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;}
+  .card h4{margin:0;font-size:15px;font-weight:700;}
+  .card .id{font-family:var(--mono);font-size:11.5px;color:var(--muted);margin-top:2px;word-break:break-all;}
+  .card p{margin:0;font-size:13.5px;max-width:none;}
+  .card .why{font-size:13.5px;color:var(--muted);border-left:2px solid var(--accent);padding-left:11px;}
+  .card .why b{color:var(--ink);font-weight:650;}
+  .card.spine{border-color:var(--accent);}
+
+  .tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
+    font-weight:700;padding:3px 8px;border-radius:6px;white-space:nowrap;flex:none;}
+  .tag.req{color:var(--req);background:var(--req-soft);}
+  .tag.opt{color:var(--opt);background:var(--opt-soft);}
+
+  /* steps */
+  .steps{display:flex;flex-direction:column;gap:2px;counter-reset:step;}
+  .phase{font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--accent-ink);font-weight:700;margin:22px 0 10px;}
+  .step{display:grid;grid-template-columns:34px 1fr;gap:14px;padding:14px 0;border-top:1px solid var(--border);}
+  .step:first-of-type{border-top:0;}
+  .step .n{counter-increment:step;font-family:var(--mono);font-weight:700;font-size:15px;color:var(--accent-ink);
+    background:var(--accent-soft);border-radius:8px;height:32px;display:flex;align-items:center;justify-content:center;}
+  .step .n::before{content:counter(step);}
+  .step h4{font-size:15.5px;font-weight:700;margin:4px 0 0;}
+  .step p{margin:7px 0 0;font-size:14px;}
+  pre.cmd{background:var(--surface-2);border:1px solid var(--border);border-radius:9px;
+    padding:12px 14px;overflow-x:auto;margin:11px 0 2px;}
+  pre.cmd code{background:none;border:0;padding:0;white-space:pre;color:var(--code);font-size:12.5px;line-height:1.7;display:block;}
+
+  /* callouts */
+  .callout{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);
+    border-radius:10px;padding:15px 18px;margin:18px 0;}
+  .callout.warn{border-left-color:var(--opt);}
+  .callout h4{margin:0 0 6px;font-size:14.5px;font-weight:700;}
+  .callout p{margin:6px 0 0;font-size:14px;}
+  .callout ul{margin:8px 0 0;padding-left:18px;}
+  .callout li{font-size:14px;margin:6px 0;color:var(--muted);}
+  .callout li b{color:var(--ink);}
+
+  /* verify */
+  .check{display:flex;gap:12px;padding:13px 0;border-top:1px solid var(--border);align-items:flex-start;}
+  .check:first-child{border-top:0;}
+  .check .mk{color:var(--req);font-weight:800;flex:none;font-family:var(--mono);}
+  .check .b{font-size:14px;}
+  .check .b b{font-weight:680;}
+  .check .b .how{color:var(--muted);}
+
+  footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--border);color:var(--muted);font-size:13px;}
+  /* additions for this guide */
+  .meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px;}
+  .pill{font-family:var(--mono);font-size:11.5px;letter-spacing:.04em;background:var(--surface);
+    border:1px solid var(--border);border-radius:999px;padding:5px 12px;color:var(--muted);}
+  .callout.alert{border-left-color:var(--alert);}
+  .callout.alert h3{margin:0 0 6px;font-size:15px;font-weight:750;}
+  table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--radius);overflow:hidden;margin:16px 0;font-size:14px;}
+  th,td{text-align:left;padding:11px 15px;border-top:1px solid var(--border);vertical-align:top;}
+  th{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700;
+    background:var(--surface-2);border-top:0;}
+  th:first-child,td:first-child{width:38%;}
+  .scroll{overflow-x:auto;}
+  /* spoken lines */
+  .say{background:var(--accent-soft);border-radius:10px;padding:13px 16px;margin:12px 0 2px;
+    display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:start;}
+  .say .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--accent-ink);font-weight:700;padding-top:3px;}
+  .say p{margin:0;font-size:14.5px;font-style:italic;max-width:60ch;}
+  /* expected output */
+  .expect{display:grid;grid-template-columns:auto 1fr;gap:11px;margin:10px 0 2px;align-items:start;}
+  .expect .mk{color:var(--req);font-weight:800;font-family:var(--mono);font-size:14px;padding-top:1px;}
+  .expect p{margin:0;font-size:14px;}
+  .expect b{font-weight:700;}
+  .ifwrong{font-size:13.5px;color:var(--muted);border-left:2px solid var(--opt);padding-left:12px;
+    margin:11px 0 0;}
+  .ifwrong b{color:var(--ink);font-weight:650;}
+  .tok{font-family:var(--mono);background:var(--opt-soft);color:var(--opt);border:1px dashed var(--opt);
+    padding:1px 6px;border-radius:5px;font-size:.9em;font-weight:650;}
+</style>
+</head>
+<body>
+<main class="wrap">
+
+<header class="hero">
+  <div class="eyebrow">Network Insights &middot; Guided install</div>
+  <h1>Installing the app &mdash; step by step</h1>
+  <p class="lede">A follow-along guide for installing Network Insights into your Dynatrace tenant.
+     No prior knowledge assumed. Seven steps, about five minutes of actual work, and nothing here
+     touches your network devices.</p>
+  <div class="meta">
+    <span class="pill">~5 minutes</span>
+    <span class="pill">no device impact</span>
+    <span class="pill">reversible</span>
+  </div>
+</header>
+
+<div class="callout">
+  <h4>Read the pre-deployment brief first</h4>
+  <p><a href="pre-deployment-brief.html">Four decisions to make first</a> covers the questions to
+     answer <b>before</b> installing anything &mdash; including one about IP addressing that cannot
+     be undone afterwards. Thirty minutes, no tooling required.</p>
+</div>
+
+<div class="callout">
+  <h4>Before we start &mdash; what this is</h4>
+  <p>This is a <b>custom app</b>, not a Dynatrace Hub app. There is no button to click inside
+     Dynatrace to install it. The source code sits in a folder on your machine, and we run one
+     command that packages it and uploads it into your tenant.</p>
+  <p>It adds pages to your Dynatrace UI. On its own it <b>collects nothing</b> and
+     <b>talks to no network device</b> &mdash; connecting data sources is a separate, later phase.</p>
+</div>
+
+<div class="callout warn">
+  <h4>Two things to sort out before the session</h4>
+  <ul>
+    <li><b>The <code>app-engine:apps:install</code> permission</b> on the account doing the install.
+        Without it, step 5 fails and there is no workaround in the room &mdash; it is an IAM change on
+        your side that cannot be made while we wait.</li>
+    <li><b>npm registry access from the machine.</b> Step 2 downloads build tooling from the public
+        npm registry. Corporate proxies commonly block it. This is the single most frequent reason
+        an install session stalls.</li>
+  </ul>
+  <p>Both are worth confirming a day ahead.</p>
+</div>
+
+<h2>What you need on the machine</h2>
+<div class="cards">
+  <div class="card">
+    <div class="top"><div><h4>Node.js 16.13 or newer</h4></div><span class="tag req">Required</span></div>
+    <p>Check it:</p>
+    <pre class="cmd"><code>node --version</code></pre>
+    <div class="why">Anything starting <code>v16.13</code>, <code>v18</code>, <code>v20</code> or
+      <code>v22</code> is fine. <b>"command not found" means Node is not installed</b> &mdash; get it
+      from nodejs.org first, which is its own detour.</div>
+  </div>
+  <div class="card">
+    <div class="top"><div><h4>The app source folder</h4></div><span class="tag req">Required</span></div>
+    <p>Provided by your Dynatrace contact as a zip or a git repository.</p>
+    <div class="why">There is <b>no download link inside Dynatrace</b> for this. If you are looking
+      for it in the Hub, you will not find it.</div>
+  </div>
+  <div class="card">
+    <div class="top"><div><h4>A browser signed in to Dynatrace</h4></div><span class="tag req">Required</span></div>
+    <p>The install authenticates through a browser window, not an API token you paste in.</p>
+    <div class="why">Make sure the browser is signed in to <b>the tenant you intend to install
+      into</b>. Being signed in to a different one is a common source of confusion at step 5.</div>
+  </div>
+  <div class="card">
+    <div class="top"><div><h4>A terminal</h4></div><span class="tag req">Required</span></div>
+    <p>Terminal on macOS or Linux, PowerShell on Windows. No administrator rights needed.</p>
+    <div class="why">Every command below runs from <b>the same folder</b>. If something looks wrong,
+      it is almost always because the terminal is in the wrong place.</div>
+  </div>
+</div>
+
+<h2>The seven steps</h2>
+<div class="steps">
+
+  <div class="step">
+    <div class="n"></div>
+    <div>
+      <h4>Open a terminal in the right folder</h4>
+      <pre class="cmd"><code>cd network-insights-app</code></pre>
+      <div class="expect"><div class="mk">&check;</div>
+        <p>The prompt now ends in <code>network-insights-app</code>.</p></div>
+      <p>Confirm it is the right folder:</p>
+      <pre class="cmd"><code>ls</code></pre>
+      <div class="expect"><div class="mk">&check;</div>
+        <p><code>app.config.json</code>, <code>package.json</code>, <code>ui</code> and
+           <code>api</code> appear in the list.</p></div>
+      <p class="ifwrong"><b>If <code>app.config.json</code> is missing</b> you are one folder too
+         high or too low. On Windows Command Prompt the command is <code>dir</code>, not
+         <code>ls</code>; PowerShell accepts both.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="n"></div>
+    <div>
+      <h4>Install the build tooling</h4>
+      <pre class="cmd"><code>npm ci</code></pre>
+      <div class="expect"><div class="mk">&check;</div>
+        <p>A spinner, then a line like <b><code>added 800 packages</code></b>. One to three minutes
+           the first time.</p></div>
+      <div class="say"><div class="lbl">Say</div>
+        <p>"This downloads the toolkit that builds the app. It is a one-time thing on this machine,
+           it writes only into this folder, and it needs no admin rights."</p></div>
+      <p class="ifwrong"><b>If it hangs or errors</b> it is almost always a corporate proxy or an
+         npm registry restriction &mdash; not the app. That is an IT conversation, and it is the most
+         common place an install stalls.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="n"></div>
+    <div>
+      <h4>Set the version number</h4>
+      <p>Open <code>app.config.json</code> in any text editor and find the version line. Increase
+         the last number by one, then save.</p>
+      <pre class="cmd"><code>"version": "0.107.0"    &rarr;    "version": "0.107.1"</code></pre>
+      <div class="say"><div class="lbl">Say</div>
+        <p>"Dynatrace will not accept a version that already exists in the tenant. Every time we
+           push an update, this number goes up. If you ever see 'version already exists', this is
+           the fix."</p></div>
+      <div class="callout" style="margin:14px 0 0">
+        <h4>While that file is open &mdash; the permissions list</h4>
+        <p>Below the version is a <code>scopes</code> array: <b>every permission the app holds, each with a
+           comment explaining why it is there</b>. That list is the complete set of things the app
+           is able to do in your tenant. Nothing outside it is possible.</p>
+        <p>If your security team wants to review one thing before install, it is this.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="n"></div>
+    <div>
+      <h4>Build it locally, before uploading anything</h4>
+      <pre class="cmd"><code>npm run build</code></pre>
+      <div class="expect"><div class="mk">&check;</div>
+        <p><code>Creating bundles...</code> with a green tick, then <b><code>Done.</code></b></p></div>
+      <div class="say"><div class="lbl">Say</div>
+        <p>"This packages the app without uploading it. We do it as its own step so that if
+           anything is wrong, we find out here on your laptop rather than halfway through an
+           upload into your tenant."</p></div>
+      <p class="ifwrong">The build may also print a box suggesting package updates.
+         <b>Ignore it</b> &mdash; those versions are pinned deliberately.</p>
+      <p class="ifwrong"><b>If the build fails, stop here.</b> Do not run step 5. Send the terminal
+         output to your Dynatrace contact.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="n"></div>
+    <div>
+      <h4>Upload it to the tenant</h4>
+      <p>One command. The destination is typed out in full, every time:</p>
+      <pre class="cmd"><code>npx dt-app deploy --environment-url https://<span class="tok">&lt;TENANT&gt;</span>.apps.dynatrace.com/</code></pre>
+      <div class="say"><div class="lbl">Say</div>
+        <p>"We name the destination explicitly on every deploy. There is no default target &mdash;
+           that is deliberate, so nobody can push to the wrong environment by accident."</p></div>
+      <div class="expect"><div class="mk">&check;</div>
+        <p>A browser tab opens asking you to sign in to Dynatrace and approve the toolkit. Click
+           through it. The terminal then shows upload progress and finishes with the app name and
+           version.</p></div>
+      <p class="ifwrong"><b>If no browser opens</b>, the terminal prints a URL &mdash; paste it into a
+         browser by hand.</p>
+      <p class="ifwrong"><b>If it fails on permissions</b>, the account is missing
+         <code>app-engine:apps:install</code>. Nothing in the terminal can fix that; it is an IAM
+         grant on your side.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="n"></div>
+    <div>
+      <h4>Confirm it landed, and open it</h4>
+      <pre class="cmd"><code>npx dt-app info</code></pre>
+      <div class="expect"><div class="mk">&check;</div>
+        <p><b>Network Insights</b> is listed, at the version you set in step 3.</p></div>
+      <p>Then open it &mdash; either search "Network Insights" in the Dynatrace launcher, or go
+         straight to:</p>
+      <pre class="cmd"><code>https://<span class="tok">&lt;TENANT&gt;</span>.apps.dynatrace.com/ui/apps/my.cno.networkinsights</code></pre>
+      <div class="expect"><div class="mk">&check;</div>
+        <p>The app opens with a left-hand navigation of ten pages.</p></div>
+      <div class="say"><div class="lbl">Say</div>
+        <p>"That is the install done. The pages will be sparse until we connect data sources &mdash;
+           that is the next phase, and a separate conversation."</p></div>
+      <p class="ifwrong">Say that <b>before</b> they see an empty page. It is the difference between
+         "installed successfully" and "is it broken?"</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="n"></div>
+    <div>
+      <h4>Give the team access</h4>
+      <p>Installing the app does not let anyone else open it. Your Dynatrace administrator grants
+         users:</p>
+      <ul>
+        <li><code>app-engine:apps:run</code> &mdash; permission to open the app at all</li>
+        <li>the metric and log read permissions your users most likely already hold</li>
+      </ul>
+      <div class="say"><div class="lbl">Say</div>
+        <p>"You have installed it, and right now you are the only person who can see it. Adding
+           your team is an IAM group change on your side, not something we do from here."</p></div>
+    </div>
+  </div>
+
+</div>
+
+<h2 id="no-browser">If step 5 cannot open a browser</h2>
+<p>Cloud development environments &mdash; GitHub Codespaces, Gitpod, a container over SSH &mdash;
+   often cannot complete the browser sign-in. There are two ways to supply credentials directly.
+   Either one short-circuits the browser flow entirely.</p>
+
+<div class="callout">
+  <h4>Try the manual paste first &mdash; it takes 30 seconds</h4>
+  <p>The toolkit has explicit Codespaces support and binds its callback so port forwarding can
+     work. When no browser opens it prints <code>Open this url to authenticate:</code> &mdash; paste
+     that into any browser and finish there. If the forwarded port (5343&ndash;5363) is private,
+     making it public is often enough on its own.</p>
+</div>
+
+<h3>Option A &mdash; a platform token</h3>
+<p>Simplest. Set one variable and run the deploy exactly as in step 5:</p>
+<pre class="cmd"><code>export DT_APP_PLATFORM_TOKEN='&lt;token&gt;'
+npx dt-app deploy --environment-url https://<span class="tok">&lt;TENANT&gt;</span>.apps.dynatrace.com/</code></pre>
+<p>The token is used as-is &mdash; no exchange, no callback, no port. It takes priority over
+   everything else, so nothing else needs changing.</p>
+
+<h3>Option B &mdash; an OAuth client <span style="font-weight:400;color:var(--muted)">(recommended)</span></h3>
+<p>Set <b>both</b> variables. Setting only one leaves the toolkit in browser mode, which looks like
+   the variables were ignored &mdash; that is the mistake people make here:</p>
+<pre class="cmd"><code>export DT_APP_OAUTH_CLIENT_ID='dt0s02.XXXX'
+export DT_APP_OAUTH_CLIENT_SECRET='dt0s02.XXXX.YYYY'
+npx dt-app deploy --environment-url https://<span class="tok">&lt;TENANT&gt;</span>.apps.dynatrace.com/</code></pre>
+<div class="expect"><div class="mk">&check;</div>
+  <p>The client needs <code>app-engine:apps:install</code>. <b>If a permission is missing the error
+     names it</b> &mdash; the toolkit retries each one individually and reports
+     <code>missing permissions: &lt;list&gt;</code>. Read that line rather than guessing.</p></div>
+<p class="ifwrong"><b>Why this one is better for most organisations:</b> an OAuth client is a
+   first-class object in your Dynatrace IAM &mdash; scoped, reviewable, revocable, auditable. It is
+   also the same mechanism you would use from a CI pipeline later, so nothing is throwaway.</p>
+
+<div class="callout warn">
+  <h4>Handling the secret</h4>
+  <p>Do <b>not</b> put it in a <code>.env</code> file in the repository, and do not paste it into a
+     terminal where it lands in shell history. In Codespaces, use
+     <b>repository settings &rarr; Secrets and variables &rarr; Codespaces</b>: they are injected as
+     environment variables when the container starts, so the deploy picks them up with nothing to
+     export by hand.</p>
+</div>
+
+<h2>If something goes wrong</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>What you see</th><th>What it means</th></tr></thead>
+  <tbody>
+    <tr><td><code>version already exists</code></td>
+        <td>Step 3 was skipped. Bump the version and run step 5 again.</td></tr>
+    <tr><td>Permission denied or 403 on upload</td>
+        <td>The account lacks <code>app-engine:apps:install</code>. Your Dynatrace administrator.</td></tr>
+    <tr><td><code>npm ci</code> hangs or fails</td>
+        <td>Proxy or npm registry restriction. Your IT team, not the app.</td></tr>
+    <tr><td>The build fails at step 4</td>
+        <td>Stop. Do not deploy. Send the output to your Dynatrace contact.</td></tr>
+    <tr><td>The app opens but every page is empty</td>
+        <td><b>Expected.</b> Data sources are the next phase.</td></tr>
+    <tr><td>No browser opens, or sign-in cannot complete</td>
+        <td>Common in Codespaces and containers. See <a href="#no-browser">"If step 5 cannot open a browser"</a> above &mdash; paste the printed URL, or supply a token.</td></tr>
+    <tr><td>The browser login loops</td>
+        <td>Wrong tenant URL in step 5, or the browser is signed in to a different tenant.</td></tr>
+    <tr><td>The old version still shows after a deploy</td>
+        <td>Cached page. Hard refresh the browser.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Backing it out</h2>
+<p>The install is fully reversible and leaves nothing behind:</p>
+<pre class="cmd"><code>npm run uninstall</code></pre>
+<div class="say"><div class="lbl">Say</div>
+  <p>"If you decide against it, one command removes it. It collected nothing and changed no device
+     configuration, so there is nothing to unwind."</p></div>
+
+<footer>
+  <p>Network Insights &mdash; guided install walkthrough. Replace <span class="tok">&lt;TENANT&gt;</span>
+     with the target environment before sharing. This document covers <b>the app install only</b>;
+     connecting data sources &mdash; extensions, flow and topology &mdash; is a separate phase with its own
+     guide. Companion documents: <code>pre-deployment-brief.html</code> for the decisions to make first, and
+     the app's own Configuration page for everything after install.</p>
+</footer>
+
+</main>
+</body>
+</html>

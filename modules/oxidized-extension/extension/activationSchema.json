@@ -1,0 +1,62 @@
+{
+  "types": {
+    "pythonRemote": {
+      "type": "object",
+      "displayName": "Oxidized archive",
+      "properties": {
+        "configPath": {
+          "displayName": "Config archive path",
+          "description": "Where Oxidized stores its archive on this ActiveGate. Three shapes all work: a plain directory of config files (file backend); a Git checkout; or — the shape Oxidized's own git output backend produces, and the one the deployment guide recommends — a BARE repository such as /var/lib/oxidized/configs.git, which has no files on disk and stores each device as a blob named after the node. Git-backed paths also enable drift.",
+          "type": "text",
+          "nullable": false,
+          "maxLength": 500,
+          "default": "/var/lib/oxidized/configs"
+        },
+        "remoteUrl": {
+          "displayName": "Remote Git URL (optional)",
+          "description": "LEAVE BLANK when Oxidized runs on this ActiveGate — the path above is then used directly. Set it when the archive lives elsewhere (GitLab, GitHub Enterprise, Bitbucket, or any Git host Oxidized pushes to with its githubrepo hook): the ActiveGate clones its own mirror and refreshes it every poll, so no NFS export or shared filesystem is needed. HTTPS only, e.g. https://gitlab.example.com/net/oxidized.git — put the username in the URL if the host needs one (https://oauth2@... for GitLab, https://x-token-auth@... for Bitbucket). SSH URLs are not supported; use the path above for an ssh-only remote.",
+          "type": "text",
+          "nullable": true,
+          "maxLength": 500
+        },
+        "remoteToken": {
+          "displayName": "Remote Git token / PAT (optional)",
+          "description": "Read access to the remote repository above. Leave blank for an unauthenticated remote. Sent as an HTTPS Authorization header, never written to disk and never placed on a command line. Do not paste it into the URL.",
+          "type": "secret",
+          "nullable": true,
+          "maxLength": 500
+        },
+        "goldenRef": {
+          "displayName": "Golden git ref (for drift)",
+          "description": "Git ref/tag of the approved baseline. Requires the path to be a Git repo. Drift is skipped if absent.",
+          "type": "text",
+          "nullable": true,
+          "maxLength": 200
+        },
+        "deviceGlob": {
+          "displayName": "Device file pattern",
+          "description": "LEAVE BLANK to auto-discover every device in the archive — required for Oxidized's git backend, which names each blob after the node with NO file extension, so a pattern like '*.cfg' matches nothing. Set a pattern only to narrow a plain directory: '*.cfg', or '*/*.cfg' when Oxidized 'groups:' is configured.",
+          "type": "text",
+          "nullable": true,
+          "maxLength": 100
+        },
+        "intervalSeconds": {
+          "displayName": "Poll interval (seconds)",
+          "type": "integer",
+          "nullable": false,
+          "default": 900,
+          "minimum": 60,
+          "maximum": 86400
+        }
+      }
+    }
+  },
+  "properties": {
+    "pythonRemote": {
+      "displayName": "Oxidized archive",
+      "type": {
+        "$ref": "#/types/pythonRemote"
+      }
+    }
+  }
+}

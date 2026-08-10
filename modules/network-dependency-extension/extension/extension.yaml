@@ -1,0 +1,61 @@
+name: custom:cno.network.dependency
+version: 0.0.2
+minDynatraceVersion: "1.295.0"
+author:
+  name: Viet Pham
+
+# Topology-only extension: materializes NetBox-declared dependencies as Smartscape edges.
+# Fed by linking metrics (emit_dependencies.py, cron on the lab VM):
+#   cno.dep.uses_network  {dt.entity.host, device.address}          -> host CALLS device
+#   cno.dep.uses          {device.address, upstream.address, link_type=data|power}
+#                                                                   -> device CALLS upstream device
+# Directionality = "depends on": app CALLS switch; access CALLS core; core CALLS wan-edge;
+# powered device CALLS pdu; pdu CALLS ups. One dependency edge type -> one traversal
+# rule for deterministic suppression (link_type dim distinguishes data vs power).
+topology:
+  types:
+    - name: network:device
+      enabled: true
+      displayName: Network device
+      rules:
+        # the downstream end (the device that depends)
+        - idPattern: network_device_{device.address}
+          instanceNamePattern: "{device.name}"
+          role: default
+          sources:
+            - sourceType: Metrics
+              condition: $prefix(cno.dep.)
+          requiredDimensions:
+            - key: device.address
+          attributes:
+            - key: dt.ip_addresses
+              pattern: "{device.address}"
+        # the upstream end (the dependency) — same global id pattern, different dimension
+        - idPattern: network_device_{upstream.address}
+          instanceNamePattern: "{upstream.name}"
+          role: upstream
+          sources:
+            - sourceType: Metrics
+              condition: $prefix(cno.dep.uses)
+          requiredDimensions:
+            - key: upstream.address
+          attributes:
+            - key: dt.ip_addresses
+              pattern: "{upstream.address}"
+  relationships:
+    - fromType: host
+      typeOfRelation: CALLS
+      toType: network:device
+      enabled: true
+      sources:
+        - sourceType: Metrics
+          condition: $prefix(cno.dep.uses_network)
+    - fromType: network:device
+      fromRole: default
+      typeOfRelation: CALLS
+      toType: network:device
+      toRole: upstream
+      enabled: true
+      sources:
+        - sourceType: Metrics
+          condition: $prefix(cno.dep.uses)

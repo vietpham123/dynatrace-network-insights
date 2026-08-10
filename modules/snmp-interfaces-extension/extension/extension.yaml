@@ -1,0 +1,810 @@
+name: custom:cno.network.interfaces
+version: 0.0.14
+# ⚠️ RAISED IN 0.0.14 FROM 1.295.0, AND minEECVersion ADDED — do not lower either without
+# re-testing `UPS battery voltage`. 0.0.14 depends on a METRIC-LEVEL `featureSet` overriding a
+# SUBGROUP-LEVEL one (the `cno.power.ups.battery_voltage` line below). That construct is real and
+# Dynatrace-blessed — com.dynatrace.extension.snmp-generic-device 3.0.4 uses metric-level
+# featureSet in the SNMP datasource 31 times, including 4 overrides of exactly this shape
+# (subgroup `NIC status` featureSet `Interfaces`, with if.in.octets.count overriding to
+# `Interfaces 32-bit` and if.hc.in.octets.count to `Interfaces 64-bit`). But that extension
+# declares minDynatraceVersion 1.338.0 / minEECVersion 1.333.0, and the EEC is what implements
+# datasource feature-set filtering. We have not tested the override below 1.338/1.333.
+# FAILURE MODE IF AN OLD EEC IGNORES IT: battery_voltage falls back to the `UPS power` set,
+# rejoins the PDU, and returns the measured 10-oid -> noSuchName idx=5 -> ZERO VALUES — i.e. the
+# exact silent failure 0.0.14 exists to fix, with the config still green. Refusing to load on an
+# old EEC is strictly better than that. Lab AG is 1.343.61, so the lab is unaffected.
+minDynatraceVersion: "1.338.0"
+minEECVersion: "1.333.0"
+author:
+  name: Viet Pham
+
+# Declarative SNMP datasource — polls IF-MIB ifTable/ifXTable per device.
+# Devices + community come from the monitoring configuration (activation).
+# The SNMP datasource auto-adds device.address (the polled mgmt IP) + device.name
+# dimensions — these are the join key to the autodiscovery network:device entities.
+#
+# ══════════════════════════════════════════════════════════════════════════════════════════
+# ⚠️⚠️  FEATURE SETS — 0.0.14 IS A BREAKING CHANGE FOR EVERY EXISTING MONITORING CONFIG  ⚠️⚠️
+# ══════════════════════════════════════════════════════════════════════════════════════════
+# WHAT CHANGED: `interfaces`, `device-health/health`, `power/ups` and `power/pdu` used to carry
+# no featureSet, so the platform placed them in the implicit `default` set and polled them
+# against EVERY device in EVERY configuration. As of 0.0.14 each is an opt-in feature set.
+#
+# WHAT THAT DOES TO A LIVE CONFIG — measured on a live tenant 2026-08-03, not assumed:
+#   Feature sets are STRICTLY ADDITIVE OPT-IN. The tenant-generated activation schema for
+#   `featureSets` is  type: set, minObjects: 0, and NO `default` key — while its siblings
+#   `enabled` (true), `version` and `activationContext` all carry defaults. Its own generated
+#   description reads, verbatim: "choose ADDITIONAL Feature sets to expand it's scope".
+#   Confirmed by 2+ days of live behaviour: 0.0.13 has declared the `lldp` group behind
+#   `featureSet: LLDP topology` while both live configs sit at "featureSets": [], and
+#   cno.lldp.* has 3 datapoints in 14 days — all inside the single hour of the 2026-08-01
+#   enable/disable test, none since. Confirmed at the ActiveGate too: across 12,848 lines of
+#   dynatracesourcesnmp.log the LLDP OID prefix 1.0.8802 appears 44 times and EVERY occurrence
+#   is the datasource echoing its own parsed definition — never a query, never a value, never
+#   an error. A declared-but-unselected group is parsed and then never put on the wire.
+#   Upgrading does NOT re-derive a stored config value; adding enum members never invalidates
+#   []. An existing "featureSets": [] STAYS [], with no prompt and no warning.
+#   You cannot declare a group INTO the default set: the platform's own extension.schema.json
+#   declares featureSet as {"type":"string","minLength":1,"maxLength":100,"pattern":"^(?!default$)"}
+#   — the name `default` is RESERVED and rejected at validation (reproduced locally against
+#   schema 1.345.0: "'default' does not match '^(?!default$)'").
+#   ⚠️ CORRECTED: an earlier draft of this block concluded from that alone that "a feature set can
+#   never be made default-ON". THAT CONCLUSION WAS UNSUPPORTED and is withdrawn. The reserved-name
+#   rule governs the featureSet IDENTIFIER, not defaulting, and the same schema bundle carries a
+#   separate mechanism this file did not consider: `featureSetsMetadata[]`, whose items REQUIRE
+#   `isRecommended: boolean` (see the block further down, added in 0.0.14). The measurement the
+#   old claim rested on — "the generated activation schema emits no `default` for featureSets" —
+#   was taken against 0.0.13, WHICH DECLARES NO featureSetsMetadata AT ALL, so it measured the
+#   null case and could not have detected the mechanism.
+#   ⚠️ STILL UNVERIFIED, in both directions: whether `isRecommended: true` pre-selects a set for
+#   NEW configurations, and whether it touches the generated activation schema's defaults. It
+#   almost certainly does NOT retroactively change a STORED value — the LLDP evidence above shows
+#   stored `[]` is never re-derived — so it is not an escape from this migration either way.
+#   Do not rely on it in either direction until it has been read back off a real upload:
+#     GET /api/v2/extensions/custom:cno.network.interfaces/0.0.14/schema
+#   The migration below is operator action, and that does not change.
+#
+#   ⇒ THE MOMENT 0.0.14 GOES ACTIVE, EVERY PRE-EXISTING CONFIG STOPS COLLECTING cno.if.*,
+#     cno.device.cpu_usage / memory_used / memory_free AND cno.power.* UNTIL AN OPERATOR
+#     EDITS IT. The configuration will still report status OK while collecting nothing.
+#     That is precisely the silent-failure shape this codebase keeps getting bitten by
+#     (drift panel returning nothing and reading as "no drift"; a refused config capture
+#     stored as success). TREAT THIS AS A MIGRATION, NOT AN UPLOAD.
+#
+# OPERATOR ACTION REQUIRED — per monitoring configuration, no exceptions:
+#   1. BEFORE upgrading, record which newly-gated families each config actually has data for.
+#      ONE PROBE PER GATE — there are FIVE new sets, so five counts. An earlier draft of this
+#      query probed only four and silently omitted `UPS battery voltage` and the memory half of
+#      `Cisco device health`; both are families that can be lost without the diff ever noticing:
+#        timeseries dp=count(cno.if.oper_status),          // gate: Interfaces
+#                      count(cno.device.cpu_usage),           // gate: Cisco device health
+#                      count(cno.device.memory_used),         // gate: Cisco device health (2nd probe:
+#                                                             //   IOS-XE / stacks answer the memory pool
+#                                                             //   OIDs but NOT cpmCPUTotal1minRev, so a
+#                                                             //   cpu-only probe reads 0 before AND after
+#                                                             //   and calls a real loss "no regression")
+#                      count(cno.power.ups.charge_pct),       // gate: UPS power
+#                      count(cno.power.ups.battery_voltage),  // gate: UPS battery voltage — under
+#                                                             //   <=0.0.13 `power/ups` was UNGATED, so on
+#                                                             //   any APC/Eaton that implements it this
+#                                                             //   metric IS live data TODAY
+#                      count(cno.power.pdu.load),             // gate: PDU power
+#                   by:{device.address}, from:-24h
+#      Map each address back to the config that polls it. That output IS the per-config
+#      featureSets list, and step 4 diffs against it. Keep it.
+#      ⚠️ THE STEP-1 RESULT OVERRIDES THE DEVICE-CLASS TABLE, ALWAYS. If a family has data at an
+#      address today, select its set for that config — even where the recommended-per-class table
+#      in docs/DEPLOYMENT-CHECKLIST.md says to leave it off. The table is for GREENFIELD configs.
+#      On an upgrade, "it is already collecting this" beats every recommendation, and that is the
+#      only rule that makes the migration lossless.
+#   2. Upload 0.0.14. Do NOT change the environment's active version yet.
+#   3. Attempt to PUT each configuration ONCE carrying `version: "0.0.14"` AND its `featureSets`
+#      array in the SAME body. ⚠️ TWO BRANCHES — the previous draft of this procedure asserted
+#      only the first and was SELF-CONTRADICTORY (its own step 2 said the enum values do not
+#      exist until the version is active, i.e. that the pre-patch it then told you to perform is
+#      impossible). Which branch you are in has never been tested; find out on a throwaway config
+#      before touching a customer fleet:
+#        (a) THE PUT IS ACCEPTED — `value.version` pins the config and the 0.0.14 activation
+#            schema is already being validated against. Finish the PUTs, then set the environment
+#            active version to 0.0.14. In that order there is no window with an empty featureSets.
+#        (b) THE PUT IS REJECTED for an unknown enum value — pre-patching is genuinely impossible
+#            because the active version is environment-wide (which is what
+#            scripts/activate-ext-version.sh documents). Then the ONLY correct order is: activate
+#            0.0.14 first, PUT every config immediately after, and ACCEPT A GAP OF MINUTES. That
+#            is safe: every affected metric is a gauge or a counter that resumes, none are
+#            event-shaped, and a short hole beats an indefinite silent one.
+#      DO NOT record "there is no window" as a property of this procedure until branch (a) has
+#      actually been observed.
+#      ⚠️ UNVERIFIED: GET monitoringConfigurations returns an inline community MASKED
+#      (`***d441caaf5ba2de77***`). A read-modify-write PUT may push the mask back as the
+#      literal community and break polling. Untested — the test is itself a mutation of a live
+#      config. Mitigate by editing in the UI, or by moving the config to the Credential Vault
+#      (`useCredentialVault: true`) first, which removes the inline secret entirely.
+#   4. AFTER, re-run the step-1 query and DIFF it. A family with data before and none after is
+#      a regression. THE CONFIG STATUS FIELD IS NOT THE TEST — a config collecting nothing
+#      still reports OK.
+#      ⚠️ THE DIFF IS A REGRESSION TEST ONLY. It is structurally incapable of telling you the
+#      fix WORKED: cno.power.* has zero datapoints on this tenant before the migration, so
+#      zero-before/zero-after passes it clean. It must be paired with a POSITIVE check, because
+#      the whole point of 0.0.14 is to make a family that was always empty stop being empty:
+#        (i)  all five set names appear in the generated activation schema after upload —
+#             GET /api/v2/extensions/custom:cno.network.interfaces/0.0.14/schema
+#             If `UPS battery voltage` is missing, the platform did not honour the METRIC-level
+#             featureSet and no operator can ever select it. Check this BEFORE activating; it is
+#             non-mutating and it settles the one construct in this file without a live test.
+#        (ii) cno.power.ups.load_pct is NON-ZERO at the UPS address within two poll cycles.
+#      Neither is optional. (i) proves the mechanism parsed, (ii) proves data flows.
+#
+#   THE RULE THIS ESTABLISHES: never gate a group without first proving, in the target
+#   environment, that it has ZERO datapoints — or migrating every config that has some. And
+#   never verify a gating change with a regression diff alone; a diff cannot see a fix.
+#
+# ── WHY IT IS WORTH THE MIGRATION — the defect this closes (ENTERPRISE-READINESS §P3) ──────
+# Measured on a live tenant 2026-08-03. The lab CyberPower OR2200LCDRTXL2U (10.0.10.146) sits at config
+# status ERROR with ZERO cno.power.* datapoints EVER recorded on the tenant, while the device
+# answers a direct GET right now with upsOutputPercentLoad=37, upsEstimatedMinutesRemaining=9.
+# It is carrying the whole Proxmox cluster plus a TrueNAS and that data is being thrown away.
+# Two independent causes, separately measured, both fixed by simply not polling the OIDs:
+#
+#   CAUSE 1 — the ifTable GetBulk hangs. Live SFM from the datasource:
+#     datasource.snmp.connect.time host=10.0.10.146      224,415 ns   (0.2 ms — reachable)
+#     datasource.snmp.get.time     host=10.0.10.146  count=2  1.70 / 9.19 ms
+#     datasource.snmp.getbulk.time host=10.0.10.146  count=1  15,001,369,092 ns  <- 15.0 s
+#     DEVICE_CONNECTION_ERROR "GetBulk query timeout for OIDs: .1.3.6.1.2.1.2.2.1.1"  = ifIndex
+#   15.0 s = timeoutSecs 5 × 3 attempts, every minute, and it is what turns the config red.
+#   The datasource issues GetBulk ONLY for `table: true` subgroups; a CyberPower RMCARD answers
+#   GetNext in 68 ms and never answers GetBulk (independently measured by
+#   controlplane_extension/snmp.py: GETNEXT 6 varbinds 68 ms vs GETBULK 0 varbinds 10,220 ms).
+#   A config that does not enable `Interfaces` issues zero GetBulk and this failure is gone.
+#   (The UPS does implement ifTable — GETNEXT returns ifIndex=1, ifNumber=2 — it just cannot
+#   serve the GetBulk PDU. Its ifDescr.1 is also raw binary (0x6167160000), so enabling
+#   interfaces on it would produce a mangled dimension even if the walk worked.)
+#
+#   CAUSE 2 — SNMPv1 all-or-nothing PDU semantics. This agent answers ONE unimplemented OID in
+#   a multi-varbind GET with `noSuchName` FOR THE WHOLE PDU, not a per-varbind noSuchObject —
+#   so a single foreign OID destroys every other value in the batch, sysName included. Measured
+#   from the ActiveGate to 10.0.10.146 (position-independent; err_index tracks the bad OID):
+#     sysName + sysUpTime                                   2 oids -> OK
+#     `ups` subgroup as written                             8 oids -> noSuchName idx=3, 0 values
+#     `ups` subgroup MINUS battery_voltage                  7 oids -> OK 7/7 in 1.8 ms
+#     sysName + `health` (Cisco)                            4 oids -> noSuchName idx=2, 0 values
+#     sysName + `pdu` (Sentry3)                             3 oids -> noSuchName idx=2, 0 values
+#     today's real default set (sysName+sysUpTime+Cisco+Sentry3+ups)  15 oids -> 0 values
+#   Both Netgear switches instead return per-varbind noSuchObject and accept 20 varbinds in one
+#   PDU — which is exactly why their config is OK and the UPS's is ERROR. (The UPS also caps
+#   PDUs: 12 implemented OIDs OK, 13 -> tooBig. maxOidsPerQuery 10 is under the cap and is NOT
+#   the problem; keep it on that config and treat it as required for the device class.)
+#
+#   ⚠️ SCALARS ARE BATCHED ACROSS GROUPS AND SUBGROUPS, up to maxOidsPerQuery. Measured: the
+#   UPS config's 15 default-set scalars went out as exactly 2 GETs at maxOidsPerQuery 10 (per-
+#   group batching would have been 3); the switch config, with no cap, sent all 15 in one.
+#   ⇒ A SUBGROUP BOUNDARY BUYS NO ISOLATION FROM A POISONED PDU **WITHIN ONE FEATURE SET**. Only
+#   not collecting the OID does. That is the whole reason the boundaries below are drawn per
+#   DEVICE CLASS. (Stated precisely because the loose version of this sentence — "a subgroup
+#   would not help" — is a category error: batching applies only to OIDs that are being
+#   COLLECTED, and an unselected subgroup's metrics never enter a PDU at all. A subgroup with
+#   its OWN featureSet isolates perfectly well. What buys nothing is a subgroup boundary that
+#   both sides of still share a feature set.)
+#
+# ── THE SETS — five, and five is the floor ─────────────────────────────────────────────────
+# Each is a question an operator can answer without a MIB browser, and each is separate
+# because MERGING IT WAS MEASURED TO BREAK SOMETHING. Names are an API contract embedded in
+# stored config values — renaming one orphans every config that selected it. Do not rename.
+#
+#   (implicit `default` — always on, not selectable, cannot be switched off)
+#         group-level `sys_name` dimension + `device-health/system` (sysUpTime). See below.
+#   `Interfaces`           -> `interfaces` group (ifTable/ifXTable). Switches, routers,
+#         firewalls, APs. JUSTIFICATION: the 15-second GetBulk in CAUSE 1 — this is the only
+#         `table: true` subgroup outside LLDP and therefore the entire GetBulk cost of a poll.
+#         Requirement: a UPS-only config must not touch interface tables.
+#   `Cisco device health`  -> `device-health/health` (6 metric lines over 3 Cisco enterprise
+#         OIDs). JUSTIFICATION for not folding it into `Interfaces`: measured, both Netgear
+#         switches return noSuchObject on 3 of 5 varbinds every 60 s forever — that is the
+#         INVALID_CONFIG_ERROR spam which IS §P3 — and on the UPS the same 3 OIDs poison the
+#         whole PDU. Cisco-ness is orthogonal to switch-ness, so it cannot ride along.
+#   `UPS power`            -> `power/ups`, minus battery_voltage. JUSTIFICATION: without it no
+#         UPS-only configuration is expressible at all; and both switches return noSuchObject
+#         on all 8 of these OIDs today, so it is pure waste everywhere else.
+#   `PDU power`            -> `power/pdu`. JUSTIFICATION for NOT merging it into `UPS power` —
+#         measured on the real UPS: default + UPS(no battery_voltage) + PDU merged, 11 oids ->
+#         noSuchName idx=10, ZERO VALUES. A single merged "Power" set reproduces the exact bug
+#         this change exists to fix, on the exact device that motivated it. Splitting is the
+#         fix, not tidiness. ⚠️ UNVERIFIED against real ServerTech hardware (see the metrics).
+#   `UPS battery voltage`  -> the single `cno.power.ups.battery_voltage` metric. JUSTIFICATION
+#         for spending a whole feature set on ONE metric: measured, default + the UPS set WITH
+#         battery_voltage, 10 oids -> noSuchName idx=5, ZERO VALUES — the UPS emits no metrics
+#         at all and never mints a network:device. Without it: OK 9/9 in 9.0 ms, 30/30
+#         consecutive polls. Moving it to its own subgroup while leaving it in the SAME feature
+#         set would not help (scalars batch across subgroups, above); what takes it off the wire
+#         is its own FEATURE SET, whether that is declared on a subgroup or on the metric. It is
+#         declared on the metric — see the evidence at the metric itself. ⚠️ UNVERIFIED:
+#         no device in this lab implements it, so this metric has never returned a value
+#         anywhere. Kept because most APC/Eaton units do serve it — enable it only on a UPS you
+#         have confirmed answers it, and CONFIRM WITH AN snmpget, NOT A WALK (a walk lists this
+#         OID on the lab CyberPower, returning NULL, while a direct GET returns noSuchName).
+#   `LLDP topology`        -> unchanged since 0.0.10, still ships OFF (see the group comment).
+#
+# GENERAL RULE for any future optional RFC 1628 or vendor object: on an all-or-nothing agent,
+# an optional OID sharing a feature set with mandatory ones is a landmine for the whole set.
+#
+# WHY `device-health/system` (sysUpTime) STAYS IN `default` AND IS DELIBERATELY NOT GATED:
+#   1. Mandatory MIB-II, and it returned a value on all three lab devices INCLUDING the UPS —
+#      the one subgroup that can never poison a batch.
+#   2. It is the floor that makes a WRONG feature-set selection visible instead of silent: a
+#      mis-classified device still emits cno.device.uptime, still carries the group-level
+#      `sys_name` dimension, and therefore still mints its network:device entity and still
+#      appears in the app. "Device present, one metric" beats "device vanished" every time.
+#      (Note `sys_name` is a GROUP-level dimension replicated on all four groups, not part of
+#      the `system` subgroup — so a UPS running only `UPS power` still names itself correctly.)
+#   3. A UPS or PDU management card rebooting is exactly as interesting as a switch rebooting,
+#      and this is the reboot detector.
+#   ⚠️ PLACEMENT IS LOAD-BEARING: featureSet INHERITS DOWN (group -> subgroup -> metric, most
+#   specific wins). A group-level featureSet on `device-health` would swallow `system` and kill
+#   cno.device.uptime, which collects at 1/min on every device today. It is therefore declared
+#   on the `health` SUBGROUP only. DO NOT "tidy" it up to the group.
+#
+# ⚠️ COMPANION CHANGE — DO NOT SHIP ONE WITHOUT THE OTHER: network-insights-app/api/
+# provision.function.ts `addDevice()` must send an explicit featureSets array, or every device
+# onboarded through the app's Configure page collects sysUpTime only and reports OK. Same for
+# the hand-rolled POST snippet in docs/ADD-A-SITE.md.
+# ══════════════════════════════════════════════════════════════════════════════════════════
+#
+# ── METRIC METADATA ───────────────────────────────────────────────────────────────────────
+# Every cno.* key used to ship with no displayName and no unit. That is not cosmetic: it is
+# precisely why "Output load 850" sat on the UPS screen unnoticed — the value was Watts, the
+# label said load, and with no unit declared nothing contradicted it. Units are the cheapest
+# defence against that class of error.
+#
+# Deliberately NOT declared for the three com.dynatrace.extension.network_device.* copies —
+# that namespace is Dynatrace's and they declare their own metadata for it. Ours would either
+# be ignored or conflict.
+#
+# `unit` is REQUIRED by the schema (the upload rejects metadata without it), so three values
+# whose raw SNMP units Dynatrace has no name for are declared Unspecified and documented in
+# the description instead — better an honest Unspecified than a wrong Volt or Second:
+#   * cno.device.uptime         sysUpTime is TimeTicks = HUNDREDTHS of a second
+#   * cno.power.ups.battery_voltage  UPS-MIB declares UNITS "0.1 Volt DC"
+# In both cases the consumer scales; the extension emits the raw OID value.
+metrics:
+  # ── interfaces ──
+  - key: cno.if.oper_status
+    metadata: { displayName: "Interface operational status", unit: State,
+                description: "IF-MIB ifOperStatus. 1=up 2=down 3=testing 4=unknown 5=dormant 6=notPresent 7=lowerLayerDown. Emitted as a VALUE, never as a dimension, so a down interface reports 2 rather than disappearing." }
+  - key: cno.if.admin_status
+    metadata: { displayName: "Interface admin status", unit: State,
+                description: "IF-MIB ifAdminStatus. 1=up 2=down 3=testing. Admin down is a configuration choice, not a fault." }
+  - key: cno.if.high_speed
+    metadata: { displayName: "Interface speed", unit: MegaBitPerSecond,
+                description: "IF-MIB ifHighSpeed, in Mbit/s. The 32-bit ifSpeed is deliberately not used: it caps at ~4.29 Gbit/s." }
+  - key: cno.if.in_octets.count
+    metadata: { displayName: "Interface bytes in", unit: Byte,
+                description: "IF-MIB ifHCInOctets, the 64-BIT counter. The 32-bit ifInOctets wraps in ~34s on a saturated 1Gb link, which silently corrupts any rate computed at a 1-minute interval." }
+  - key: cno.if.out_octets.count
+    metadata: { displayName: "Interface bytes out", unit: Byte,
+                description: "IF-MIB ifHCOutOctets, the 64-bit counter." }
+  - key: cno.if.in_errors.count
+    metadata: { displayName: "Interface errors in", unit: Count,
+                description: "IF-MIB ifInErrors. Counter32 — IF-MIB defines no 64-bit variant. Drives the error-burst detector." }
+  - key: cno.if.out_errors.count
+    metadata: { displayName: "Interface errors out", unit: Count, description: "IF-MIB ifOutErrors (Counter32)." }
+  - key: cno.if.in_discards.count
+    metadata: { displayName: "Interface discards in", unit: Count,
+                description: "IF-MIB ifInDiscards. Discards are not errors: the frame was fine and was dropped anyway, usually buffer exhaustion." }
+  - key: cno.if.out_discards.count
+    metadata: { displayName: "Interface discards out", unit: Count, description: "IF-MIB ifOutDiscards (Counter32)." }
+  # ── device health ──
+  - key: cno.device.cpu_usage
+    metadata: { displayName: "Device CPU utilisation", unit: Percent,
+                description: "CISCO-PROCESS-MIB cpmCPUTotal1minRev. CISCO-ONLY; returns nothing on other vendors. Pinned to CPU index 1, so on a stack this is one member." }
+  - key: cno.device.memory_used
+    metadata: { displayName: "Device memory used", unit: Byte,
+                description: "CISCO-MEMORY-POOL-MIB ciscoMemoryPoolUsed, pool 1. Gauge32 bytes, so it saturates above 4 GiB. Cisco deprecated this MIB in favour of CISCO-ENHANCED-MEMPOOL-MIB." }
+  - key: cno.device.memory_free
+    metadata: { displayName: "Device memory free", unit: Byte,
+                description: "CISCO-MEMORY-POOL-MIB ciscoMemoryPoolFree, pool 1. Same Gauge32 limit as memory_used." }
+  - key: cno.device.uptime
+    metadata: { displayName: "Device uptime (TimeTicks)", unit: Unspecified,
+                description: "SNMPv2-MIB sysUpTime. UNITS ARE HUNDREDTHS OF A SECOND, not seconds — divide by 100. A drop in this value is an unplanned reboot." }
+  # ── power ──
+  - key: cno.power.ups.battery_status
+    metadata: { displayName: "UPS battery status", unit: State,
+                description: "UPS-MIB upsBatteryStatus. 1=unknown 2=batteryNormal 3=batteryLow 4=batteryDepleted." }
+  - key: cno.power.ups.charge_pct
+    metadata: { displayName: "UPS battery charge", unit: Percent, description: "UPS-MIB upsEstimatedChargeRemaining." }
+  - key: cno.power.ups.battery_voltage
+    metadata: { displayName: "UPS battery voltage (decivolts)", unit: Unspecified,
+                description: "UPS-MIB upsBatteryVoltage. UNITS ARE 0.1 VOLT DC — a 54.0 V bus reports 540. Divide by 10. Not implemented by every UPS: a CyberPower OR2200LCDRTXL2U returns noSuchName." }
+  - key: cno.power.ups.output_source
+    metadata: { displayName: "UPS output source", unit: State,
+                description: "UPS-MIB upsOutputSource. 1=other 2=none 3=normal(mains) 4=bypass 5=BATTERY 6=booster 7=reducer. 5 means mains has been lost while everything is still powered." }
+  - key: cno.power.ups.output_watts
+    metadata: { displayName: "UPS output power", unit: Watt,
+                description: "UPS-MIB upsOutputPower, output LINE 1 only. On a multi-line or 3-phase unit this is one line, not the total. ⚠️ IMPLEMENTED-BUT-MEANINGLESS ON SOME UNITS: a CyberPower OR2200LCDRTXL2U returns INTEGER 0 while upsOutputPercentLoad reports 34-37% (measured 2026-08-03). Nothing marks that invalid, which is worse than absent — prefer cno.power.ups.load_pct as the load signal and treat a flat 0 here as unimplemented, not as no draw." }
+  - key: cno.power.ups.load_pct
+    metadata: { displayName: "UPS output load", unit: Percent,
+                description: "UPS-MIB upsOutputPercentLoad, output line 1. Percent of rated capacity." }
+  - key: cno.power.ups.minutes_remaining
+    metadata: { displayName: "UPS runtime remaining", unit: Minute,
+                description: "UPS-MIB upsEstimatedMinutesRemaining. The number that matters during a power event." }
+  - key: cno.power.ups.seconds_on_battery
+    metadata: { displayName: "UPS time on battery", unit: Second,
+                description: "UPS-MIB upsSecondsOnBattery. Zero when running on mains." }
+  - key: cno.power.pdu.load
+    metadata: { displayName: "PDU infeed load", unit: Unspecified,
+                description: "ServerTech Sentry3 infeed load. UNITS UNVERIFIED — Sentry3 typically reports hundredths of an amp, and these OIDs have never been tested against real ServerTech hardware. Treat with suspicion until validated." }
+  - key: cno.power.pdu.status
+    metadata: { displayName: "PDU infeed status", unit: State,
+                description: "ServerTech Sentry3 infeed status. UNVERIFIED against real hardware." }
+  # ── LLDP ──
+  - key: cno.lldp.local
+    metadata: { displayName: "LLDP local chassis present", unit: State, description: "Presence marker carrying this device's own chassis id as a dimension." }
+  - key: cno.lldp.remote
+    metadata: { displayName: "LLDP neighbour present", unit: State, description: "Presence marker, one per neighbour. NOTE: the declarative datasource mangles binary chassis ids — the Python controlplane extension is the accurate source." }
+
+# ── FEATURE SET METADATA ──────────────────────────────────────────────────────────────────
+# ADDED IN 0.0.14. Without this block the monitoring-configuration UI renders the six sets as
+# BARE INTERNAL STRINGS — "UPS battery voltage" with no explanation of why it is separate, or
+# what it costs to tick it on the wrong device. Every piece of guidance in this file lived only
+# in YAML comments that no operator ever sees, which defeated the whole design rule the sets
+# were drawn to ("each is a question an operator can answer without a MIB browser"). Since the
+# ONLY mitigation this breaking change has is the operator choosing correctly, the descriptions
+# below are load-bearing safety text, not documentation polish.
+#
+# ⚠️ `isRecommended` is REQUIRED by the schema, so it must be answered for every set — it cannot
+# be omitted to stay neutral. What it actually does is UNVERIFIED (see the header): it may only
+# hint the UI, or it may pre-select the set for NEW configurations. It is set true for
+# `Interfaces` ONLY, mirroring com.dynatrace.extension.snmp-generic-device 3.0.4, which marks
+# Interfaces recommended and its narrow variants (Interfaces 32-bit / 64-bit / Control Plane)
+# not. If it does pre-select, that is right for the overwhelmingly common device and wrong for a
+# UPS — hence the explicit DO-NOT warning in the Interfaces description below. It cannot affect
+# an EXISTING config: a stored featureSets value is never re-derived (LLDP evidence, header).
+featureSetsMetadata:
+  - id: Interfaces
+    displayName: "Interfaces (ifTable / ifXTable)"
+    description: >-
+      Per-interface status, speed, throughput, errors and discards (IF-MIB). Enable on switches,
+      routers, firewalls and APs. ⚠️ DO NOT ENABLE ON A UPS OR PDU MANAGEMENT CARD. This is the
+      only group that issues SNMP GetBulk, and many management cards answer GetNext in
+      milliseconds but never answer GetBulk at all — measured on a CyberPower OR2200LCDRTXL2U as
+      a 15.0-second timeout every minute, which puts the ENTIRE configuration into ERROR and
+      discards the power OIDs that device does serve.
+    isRecommended: true
+  - id: Cisco device health
+    displayName: "Cisco device health (CPU / memory)"
+    description: >-
+      CPU utilisation and memory pool used/free, plus the com.dynatrace.extension.network_device.*
+      copies that feed the built-in Infrastructure & Operations CPU and Memory tiles. CISCO ONLY —
+      these are .1.3.6.1.4.1.9 enterprise OIDs. On non-Cisco gear they return noSuchObject on
+      every poll forever; on an all-or-nothing SNMPv1 agent (many UPS and PDU cards) they poison
+      the entire request and take sysName and uptime down with them.
+    isRecommended: false
+  - id: UPS power
+    displayName: "UPS power (RFC 1628 UPS-MIB)"
+    description: >-
+      Battery status and charge, output source (mains vs battery), output load percent and watts,
+      estimated runtime remaining, and seconds on battery. Enable on a UPS; leave off everywhere
+      else — both lab switches return noSuchObject on all of these. Deliberately does NOT include
+      battery voltage, which is its own set for a measured reason; see "UPS battery voltage".
+    isRecommended: false
+  - id: UPS battery voltage
+    displayName: "UPS battery voltage — enable only if confirmed"
+    description: >-
+      The single upsBatteryVoltage object, in units of 0.1 V DC. ⚠️ ENABLE ONLY ON A UPS YOU HAVE
+      CONFIRMED ANSWERS IT, and the test is an snmpget, NOT a MIB walk — a CyberPower
+      OR2200LCDRTXL2U LISTS this OID in a GETNEXT walk (returning NULL) while a direct GET returns
+      noSuchName, so a walk-based pre-flight will tell you it is present when it is not. On an
+      all-or-nothing agent that noSuchName kills the whole request: measured 10 OIDs to zero
+      values, no metrics and no device entity at all, versus 9 of 9 in 9 ms without it. That is
+      why it is separated from "UPS power". ⚠️ UNVERIFIED — no lab device implements it.
+    isRecommended: false
+  - id: PDU power
+    displayName: "PDU power (ServerTech Sentry3) — UNVERIFIED"
+    description: >-
+      ServerTech Sentry3 infeed load and status. ⚠️ UNVERIFIED: these OIDs and their units have
+      never been queried against real ServerTech hardware — both are vendor-documentation guesses.
+      Kept separate from "UPS power" because merging them was measured to reproduce the original
+      defect: 11 OIDs in one request returned noSuchName and ZERO values on a real UPS.
+    isRecommended: false
+  - id: LLDP topology
+    displayName: "LLDP topology (neighbours) — not usable for topology yet"
+    description: >-
+      LLDP local chassis id and neighbour table, polled every 15 minutes. ⚠️ SHIPS OFF AND SHOULD
+      STAY OFF. The declarative SNMP datasource decodes binary OCTET STRINGs as text, so
+      MAC-format chassis ids are destroyed (20 4E 7F 4E C3 E6 arrives as ' N_N') and the
+      chassis-id join this group exists for does not work; the Python controlplane extension is
+      the accurate source. Also a cost control: a 48-port access switch can yield 40+ neighbours.
+    isRecommended: false
+
+snmp:
+  # ⚠️ OPT-IN as of 0.0.14 — an existing config with "featureSets": [] STOPS collecting
+  # cno.if.* the moment 0.0.14 is activated. See the FEATURE SETS block at the top of this
+  # file for the measured evidence and the exact per-config operator action. This is the
+  # single most damaging line in the file if the migration is skipped.
+  #
+  # Gated because ifTable is the only `table: true` subgroup here, so it is the only thing
+  # that issues GetBulk — and GetBulk is what hangs for 15.0 s against the CyberPower UPS
+  # (10.0.10.146, measured 2026-08-03) and turns its whole configuration red, taking the
+  # power OIDs it DOES serve down with it.
+  - group: interfaces
+    featureSet: Interfaces
+    interval:
+      minutes: 1
+    dimensions:
+      # scalar sysName (1.3.6.1.2.1.1.5.0) broadcast to every ifTable row — the real
+      # device name (matches autodiscovery's sys.name), so the network:device rule
+      # doesn't clobber it with reverse-DNS of the aliased mgmt IP.
+      - key: sys_name
+        value: oid:1.3.6.1.2.1.1.5.0
+    subgroups:
+      - subgroup: ifTable
+        table: true
+        dimensions:
+          - key: if_index
+            value: oid:1.3.6.1.2.1.2.2.1.1
+          - key: if_descr
+            value: oid:1.3.6.1.2.1.2.2.1.2
+        metrics:
+          - key: cno.if.oper_status
+            value: oid:1.3.6.1.2.1.2.2.1.8
+            type: gauge
+          - key: cno.if.admin_status
+            value: oid:1.3.6.1.2.1.2.2.1.7
+            type: gauge
+          - key: cno.if.high_speed
+            value: oid:1.3.6.1.2.1.31.1.1.1.15
+            type: gauge
+          - key: cno.if.in_octets.count
+            value: oid:1.3.6.1.2.1.31.1.1.1.6
+            type: count
+          - key: cno.if.out_octets.count
+            value: oid:1.3.6.1.2.1.31.1.1.1.10
+            type: count
+          # Error + discard counters (IF-MIB) — the "link health" layer: catch a
+          # degrading link (dirty optic/CRC/congestion) before it drops. Feed bad-link.
+          - key: cno.if.in_errors.count
+            value: oid:1.3.6.1.2.1.2.2.1.14
+            type: count
+          - key: cno.if.out_errors.count
+            value: oid:1.3.6.1.2.1.2.2.1.20
+            type: count
+          - key: cno.if.in_discards.count
+            value: oid:1.3.6.1.2.1.2.2.1.13
+            type: count
+          - key: cno.if.out_discards.count
+            value: oid:1.3.6.1.2.1.2.2.1.19
+            type: count
+  # Device health -> the I&O Overview CPU/Memory tiles. The tiles query the shared
+  # semantic namespace com.dynatrace.extension.network_device.* bound to
+  # dt.entity.network:device (revealed via the tiles' own DQL). Memory tile computes
+  # usage from used+free when usage/total absent. OIDs: CISCO-PROCESS + MEMORY-POOL
+  # (served breathing by the walks).
+  #
+  # ⚠️ NO featureSet AT GROUP LEVEL, ON PURPOSE. featureSet inherits down, so declaring it
+  # here would swallow the `system` subgroup and stop cno.device.uptime — the one metric
+  # every device in the fleet actually answers (1/min on all three lab devices, the UPS
+  # included). The Cisco OIDs are gated on the `health` SUBGROUP instead. Do not move it up.
+  - group: device-health
+    interval:
+      minutes: 1
+    dimensions:
+      - key: sys_name
+        value: oid:1.3.6.1.2.1.1.5.0
+    subgroups:
+      # DUAL-EMITTED ON PURPOSE — same OID, two keys.
+      #
+      # com.dynatrace.extension.network_device.* is DYNATRACE'S namespace. Emitting into it is
+      # what lights up the built-in I&O Overview CPU/Memory tiles (they query exactly that
+      # prefix), so it earns its place. But we must not DEPEND on a namespace we do not
+      # control: Dynatrace versions it and has already renamed a key inside it — Generic Cisco
+      # Device 3.5.0, verbatim, "renamed to avoid conflicts with generic network topology
+      # rules". If they rename ours, our own screens go dark with no warning.
+      #
+      # So: cno.device.* is what THIS APP queries and owns. The Dynatrace-prefixed copy exists
+      # solely to feed their tiles, and nothing of ours reads it. If it ever collides or is
+      # renamed upstream we lose a first-party tile, not our own product.
+      #
+      # Cost of the duplication: 3 extra metric lines per device per minute. Negligible.
+      #
+      # ⚠️ OPT-IN as of 0.0.14 — CISCO ENTERPRISE OIDs (.1.3.6.1.4.1.9.*), and nothing else
+      # answers them. Measured 2026-08-03: both Netgear switches return noSuchObject on 3 of 5
+      # varbinds EVERY 60 s (the INVALID_CONFIG_ERROR stream recorded as §P3), and on the
+      # CyberPower UPS these 3 OIDs return noSuchName for the WHOLE PDU, destroying sysName and
+      # sysUpTime in the same batch. An existing config on a Cisco fleet MUST have
+      # "Cisco device health" added to it or cno.device.cpu_usage / memory_used / memory_free
+      # stop — see the FEATURE SETS block at the top of this file.
+      - subgroup: health
+        featureSet: Cisco device health
+        metrics:
+          - key: cno.device.cpu_usage
+            value: oid:1.3.6.1.4.1.9.9.109.1.1.1.1.7.1
+            type: gauge
+          - key: cno.device.memory_used
+            value: oid:1.3.6.1.4.1.9.9.48.1.1.1.5.1
+            type: gauge
+          - key: cno.device.memory_free
+            value: oid:1.3.6.1.4.1.9.9.48.1.1.1.6.1
+            type: gauge
+          # --- copies for Dynatrace's own I&O tiles only; do not query these ---
+          - key: com.dynatrace.extension.network_device.cpu_usage
+            value: oid:1.3.6.1.4.1.9.9.109.1.1.1.1.7.1
+            type: gauge
+          - key: com.dynatrace.extension.network_device.memory_used
+            value: oid:1.3.6.1.4.1.9.9.48.1.1.1.5.1
+            type: gauge
+          - key: com.dynatrace.extension.network_device.memory_free
+            value: oid:1.3.6.1.4.1.9.9.48.1.1.1.6.1
+            type: gauge
+      # sysUpTime (SNMPv2-MIB) — a drop = an unplanned reboot. Scalar, no table.
+      #
+      # DELIBERATELY UNGATED — this subgroup IS the `default` feature set, and it is the only
+      # thing keeping a mis-classified device visible. Mandatory MIB-II; measured answering on
+      # all three lab devices including the UPS (sysUpTime 1,084,600), so it can never poison a
+      # batch. Rationale in full at the top of this file — do not add a featureSet here.
+      - subgroup: system
+        metrics:
+          - key: cno.device.uptime
+            value: oid:1.3.6.1.2.1.1.3.0
+            type: gauge
+  # Power — UPS (RFC 1628 UPS-MIB .33) + PDU (ServerTech Sentry3 .1718).
+  #
+  # ⛔ CORRECTION 2026-08-03. This comment used to read: "switches return noSuchObject -> no
+  # metric, so this one group safely polls every device and yields power metrics only where
+  # they exist." THAT IS FALSE and it is the assumption that produced the whole defect.
+  # It is true only of agents that answer per-varbind. The lab's CyberPower OR2200LCDRTXL2U
+  # answers `noSuchName` FOR THE ENTIRE PDU, so one foreign OID zeroes the whole batch — which
+  # is why the tenant has never held a single cno.power.* datapoint while the device happily
+  # serves 37% load and 9 minutes of runtime to a direct GET. Never assume noSuchObject.
+  #
+  # ⚠️ NO featureSet AT GROUP LEVEL: `ups` and `pdu` are gated SEPARATELY. Merging them into
+  # one "Power" set was measured to reproduce the original bug (11 oids -> noSuchName idx=10,
+  # zero values, on the real UPS). See the FEATURE SETS block at the top of this file.
+  - group: power
+    interval:
+      minutes: 1
+    dimensions:
+      - key: sys_name
+        value: oid:1.3.6.1.2.1.1.5.0
+    subgroups:
+      # ⚠️ OPT-IN as of 0.0.14. Enable on a UPS; leave off everywhere else — measured, both
+      # Netgear switches return noSuchObject on all 8 of these. Predicted (and measured) poll
+      # for a UPS running ONLY this set: one GET of 9 varbinds — sysName, sysUpTime and the 7
+      # UPS-MIB objects below — in ~9 ms, ZERO GetBulk, endpoint OK. 30/30 consecutive polls
+      # succeeded from the ActiveGate on 2026-08-03.
+      - subgroup: ups
+        featureSet: UPS power
+        metrics:
+          - key: cno.power.ups.battery_status
+            value: oid:1.3.6.1.2.1.33.1.2.1.0
+            type: gauge
+          - key: cno.power.ups.charge_pct
+            value: oid:1.3.6.1.2.1.33.1.2.4.0
+            type: gauge
+          # NOTE units: upsBatteryVoltage is "0.1 Volt DC", so a 54.0 V bus reports 540.
+          # The app divides by 10 at render time (DeviceDetail). Do not "fix" it here by
+          # renaming — the raw OID value is what the datasource emits.
+          #
+          # ⛔ ITS OWN FEATURE SET, AND THIS IS THE FINDING THAT WOULD HAVE MADE 0.0.14 LAND
+          # AND SILENTLY FAIL. A `UPS power` set containing this OID yields, measured against
+          # the real CyberPower on 2026-08-03: 10 oids -> noSuchName err_index=5, ZERO VALUES —
+          # not "one missing metric" but the WHOLE PDU, sysName and sysUpTime included, so the
+          # device emits nothing at all and never mints a network:device entity. Drop this one
+          # OID and the same batch is OK 9/9 in 9.0 ms. A separate subgroup IN THE SAME FEATURE
+          # SET would not have helped — scalars are batched across subgroups — but a separate
+          # feature set does, and that is what this is. Only feature-set membership decides what
+          # goes on the wire.
+          #
+          # ── WHY A METRIC-LEVEL featureSet IS SAFE HERE (this was challenged; here is the proof)
+          # The concern: `snmp.schema.json` declares `featureSet` explicitly at GROUP and SUBGROUP
+          # level, but the metric object is just {"$ref": "extension.schema.json#/definitions/
+          # metric"} — the datasource-independent definition shared with prometheus/wmi/sql/jmx.
+          # So schema validation passing proves only that the key is LEGAL, not that the SNMP
+          # datasource READS it. If it were ignored, this metric would fall back to `UPS power`
+          # and silently re-create the 10-oid failure above with the config still green.
+          # Settled by first-party precedent, not by assumption:
+          # com.dynatrace.extension.snmp-generic-device 3.0.4 — Dynatrace's own SNMP extension —
+          # uses metric-level featureSet in the SNMP datasource 31 times, and FOUR of those are
+          # this exact construct, a metric OVERRIDING its subgroup's set:
+          #     subgroup `NIC status`, featureSet `Interfaces`
+          #       -> if.in.octets.count       featureSet `Interfaces 32-bit`
+          #       -> if.hc.in.octets.count    featureSet `Interfaces 64-bit`
+          #       -> if.out.octets.count      featureSet `Interfaces 32-bit`
+          #       -> if.hc.out.octets.count   featureSet `Interfaces 64-bit`
+          # That also pins the SEMANTICS to most-specific-wins OVERRIDE rather than union: 32-bit
+          # and 64-bit octet counters are mutually exclusive alternatives, so if selecting
+          # `Interfaces` also pulled in both overridden metrics the split would be pointless and
+          # every device would be polled for both counter widths. Override is the only reading
+          # under which that extension makes sense.
+          # This is ALSO why minDynatraceVersion/minEECVersion were raised at the top of the file:
+          # that extension declares 1.338.0/1.333.0, and the EEC implements the filtering.
+          # STILL DO the non-mutating post-upload check in step 4(i) — the generated activation
+          # schema must list `UPS battery voltage` as a selectable set. If it does not, the
+          # platform did not honour the metric-level key on THIS version and this metric must be
+          # deleted rather than left to rejoin the UPS batch.
+          #
+          # ⚠️ UNVERIFIED (`verified: False`, PLATFORMS sense): no device in this lab
+          # implements it — the CyberPower returns noSuchName, both Netgear switches return
+          # noSuchObject — so this metric has never returned a real value anywhere. Retained
+          # because most APC/Eaton units do serve it. Enable `UPS battery voltage` ONLY on a
+          # UPS you have confirmed answers the OID; on a UPS that does not, enabling it takes
+          # every other power metric on that device down with it.
+          - key: cno.power.ups.battery_voltage
+            featureSet: UPS battery voltage
+            value: oid:1.3.6.1.2.1.33.1.2.5.0
+            type: gauge
+          - key: cno.power.ups.output_source
+            value: oid:1.3.6.1.2.1.33.1.4.1.0
+            type: gauge
+          # CORRECTED 2026-08-01. This OID was published as cno.power.ups.load, i.e. a
+          # PERCENTAGE. It is not. Per RFC 1628 upsOutputEntry:
+          #   .4 upsOutputPower       UNITS "Watts"
+          #   .5 upsOutputPercentLoad UNITS "percent"
+          # We polled .4 and labelled it load, so a 2200 VA unit drawing 850 W rendered as
+          # "load 850" with no unit. Both are now collected under honest names.
+          #
+          # The trailing .1 pins OUTPUT LINE 1. On a 3-phase or multi-line UPS that reports one
+          # third of the load silently. Fixing that needs a table walk, which the declarative
+          # datasource can do but this group is not structured for — tracked, not fixed here.
+          - key: cno.power.ups.output_watts
+            value: oid:1.3.6.1.2.1.33.1.4.4.1.4.1
+            type: gauge
+          - key: cno.power.ups.load_pct
+            value: oid:1.3.6.1.2.1.33.1.4.4.1.5.1
+            type: gauge
+          # The two signals an operator actually wants during a power event. We had neither:
+          # "on battery" without "for how long" is not actionable.
+          - key: cno.power.ups.minutes_remaining
+            value: oid:1.3.6.1.2.1.33.1.2.3.0
+            type: gauge
+          - key: cno.power.ups.seconds_on_battery
+            value: oid:1.3.6.1.2.1.33.1.2.2.0
+            type: gauge
+      # ⚠️ OPT-IN as of 0.0.14, and SEPARATE from `UPS power` for a measured reason, not for
+      # tidiness: default + UPS(no battery_voltage) + these two merged into one set = 11 oids
+      # -> noSuchName err_index=10, ZERO VALUES on the real UPS. A merged "Power" set
+      # reproduces the exact bug being fixed, on the exact device that motivated the fix.
+      # It also means a customer can enable UPS monitoring without also enabling OIDs that
+      # have never been proven.
+      # ⚠️ UNVERIFIED (`verified: False`): these ServerTech Sentry3 OIDs have never been
+      # queried against real ServerTech hardware — only against devices that do not implement
+      # them. Both the OIDs and the units below are vendor-doc guesses.
+      - subgroup: pdu
+        featureSet: PDU power
+        metrics:
+          - key: cno.power.pdu.load
+            value: oid:1.3.6.1.4.1.1718.3.2.2.2.1.7.1.1
+            type: gauge
+          - key: cno.power.pdu.status
+            value: oid:1.3.6.1.4.1.1718.3.2.2.2.1.4.1.1
+            type: gauge
+
+  # ── LLDP neighbour discovery ── ⚠️ NOT USABLE FOR TOPOLOGY YET — SHIP DISABLED ──
+  # STATUS 2026-08-01: this group works, but it CANNOT deliver the topology join it exists
+  # for, because the declarative SNMP datasource decodes binary OCTET STRINGs as text and
+  # destroys them. Measured against real hardware:
+  #     lldpRemChassisId  "20 4E 7F 4E C3 E6"  (a MAC)  ->  landed in Grail as ' N_N'
+  #     lldpRemSysCapEnabled "20 00" (Bridge)           ->  landed as ' '
+  #     lldpRemSysCapEnabled "28 00" (Bridge+Router)    ->  landed as '('
+  # Neighbours that advertise a PRINTABLE chassis id survive ("58:d6:1f:23:21:af",
+  # "VP-GAMING-PC"), but MAC-format ids — the common case — do not. That breaks both the
+  # chassis-id join AND the capability-based endpoint filtering the design depends on.
+  # A Python EF2.0 extension (which can handle the raw bytes) is required instead.
+  # Left in place, DISABLED, because the feature-set mechanism itself is proven and is the
+  # cost control we want; do not enable it expecting topology.
+  #
+  # Its OWN feature set, so an operator can switch the entire walk off per monitoring
+  # configuration. That matters for cost: the endpoint noise concentrates on access
+  # switches (a 48-port switch full of phones/PCs can yield 40+ neighbours), while the
+  # topology you actually want lives on core/distribution. The intended pattern is two
+  # configs — LLDP on for the fabric, off for access.
+  #
+  # 15-minute interval on purpose: topology changes slowly and a cable move is not a
+  # 60-second emergency, so this is ~15x cheaper than the 1-minute groups above.
+  #
+  # We deliberately do NOT read lldpRemManAddrTable: the neighbour's management IP lives
+  # only inside that table's OID *index*, which a declarative datasource cannot extract.
+  # lldpRemChassisId is a column, so the join key is readable — a neighbour is resolved to
+  # a real device by matching its chassis id against that device's own lldpLocChassisId.
+  # (Verified on real Netgear hardware 2026-08-01: the trunk between two switches matches
+  # bidirectionally on chassis id, while lldpRemSysName was empty or "(none).(none)".)
+  - group: lldp
+    featureSet: LLDP topology
+    interval:
+      minutes: 15
+    dimensions:
+      - key: sys_name
+        value: oid:1.3.6.1.2.1.1.5.0
+    subgroups:
+      # This device's OWN chassis id — the other half of the join.
+      - subgroup: lldp-local
+        dimensions:
+          - key: local_chassis_id
+            value: oid:1.0.8802.1.1.2.1.3.2.0
+        metrics:
+          - key: cno.lldp.local
+            value: oid:1.0.8802.1.1.2.1.3.1.0
+            type: gauge
+      # One row per neighbour this device can see.
+      - subgroup: lldp-remote
+        table: true
+        dimensions:
+          - key: rem_chassis_id
+            value: oid:1.0.8802.1.1.2.1.4.1.1.5
+          - key: rem_port_id
+            value: oid:1.0.8802.1.1.2.1.4.1.1.7
+          - key: rem_sys_name
+            value: oid:1.0.8802.1.1.2.1.4.1.1.9
+          # IEEE 802.1AB capability bitmap — the standards-defined "what IS this neighbour".
+          # Decoded live: 20 00 = Bridge, 28 00 = Bridge+Router, 01 00 = Station Only,
+          # 80 00 = Other, 00 00 = advertises nothing. The UI classifies on this, and treats
+          # 00 00 as UNKNOWN (shown) rather than endpoint (hidden) — a real Netgear switch in
+          # the lab advertises 00 00, so hiding unknowns would hide actual infrastructure.
+          - key: rem_capabilities
+            value: oid:1.0.8802.1.1.2.1.4.1.1.12
+        metrics:
+          - key: cno.lldp.remote
+            value: oid:1.0.8802.1.1.2.1.4.1.1.4
+            type: gauge
+
+# Topology: create a network:interface per (device, ifIndex) and attach it CHILD_OF
+# the network:device. The network:device rule uses the SAME idPattern autodiscovery
+# uses (network_device_{device.address}), so our interface metrics resolve onto the
+# EXISTING device entity by mgmt IP — reconciliation, not duplication.
+topology:
+  types:
+    - name: network:interface
+      enabled: true
+      displayName: Network interface
+      rules:
+        - idPattern: network_interface_{device.address}_{if_index}
+          instanceNamePattern: "{if_descr}"
+          sources:
+            - sourceType: Metrics
+              condition: $prefix(cno.if.)
+          requiredDimensions:
+            - key: device.address
+            - key: if_index
+          attributes:
+            - key: if_descr
+              pattern: "{if_descr}"
+              displayName: Interface name
+            - key: if_index
+              pattern: "{if_index}"
+              displayName: ifIndex
+    - name: network:device
+      enabled: true
+      displayName: Network device
+      rules:
+        # Same idPattern autodiscovery uses -> resolves onto the SAME device entity by
+        # mgmt IP (reconciliation). instanceNamePattern uses the SNMP sysName (sys_name),
+        # which matches autodiscovery's sys.name -> no name conflict. (The earlier
+        # vp-cno-netops clobber was OneAgent claiming these IPs; OneAgent is now removed.)
+        - idPattern: network_device_{device.address}
+          instanceNamePattern: "{sys_name}"
+          sources:
+            - sourceType: Metrics
+              condition: $prefix(cno.if.)
+            - sourceType: Metrics
+              condition: $prefix(cno.device.)
+            # Reading their namespace is deliberate convergence: if the customer also runs
+            # Dynatrace's generic SNMP extension, its metrics attach to the SAME entity rather
+            # than minting a second one. Reading theirs is fine; depending on it is not.
+            - sourceType: Metrics
+              condition: $prefix(com.dynatrace.extension.network_device)
+            - sourceType: Metrics
+              condition: $prefix(cno.power.)
+            - sourceType: Metrics
+              condition: $prefix(cno.lldp.)
+          requiredDimensions:
+            - key: device.address
+            - key: sys_name
+          attributes:
+            - key: dt.ip_addresses
+              pattern: "{device.address}"
+  relationships:
+    - fromType: network:interface
+      typeOfRelation: CHILD_OF
+      toType: network:device
+      enabled: true
+      sources:
+        - sourceType: Metrics
+          condition: $prefix(cno.if.)

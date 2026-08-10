@@ -1,0 +1,60 @@
+{
+  "$schema": "./.dt-app/app.config.schema.json",
+  "environmentUrl": "https://YOUR-TENANT.apps.dynatrace.com/",
+  "app": {
+    "name": "Network Insights",
+    "version": "1.0.0",
+    "description": "NetOps observability: device health, NetFlow, topology, compliance, RCA.",
+    "id": "my.cno.networkinsights",
+    "scopes": [
+      {
+        "name": "storage:logs:read",
+        "comment": "config-change, compliance, syslog and trap events from Grail"
+      },
+      {
+        "name": "storage:metrics:read",
+        "comment": "SNMP interface/health metrics for the device fleet"
+      },
+      {
+        "name": "storage:buckets:read",
+        "comment": "resolve the buckets for the fetch/timeseries queries"
+      },
+      {
+        "name": "storage:events:read",
+        "comment": "Davis problems for the Alerts view"
+      },
+      {
+        "name": "extensions:configurations:read",
+        "comment": "find a device's monitoring config to retire it"
+      },
+      {
+        "name": "extensions:configurations:write",
+        "comment": "onboard/retire devices \u2014 create/delete SNMP monitoring configs"
+      },
+      {
+        "name": "extensions:definitions:read",
+        "comment": "wizard: list installed extensions to advise which are present"
+      },
+      {
+        "name": "credentialVault.read",
+        "comment": "list Credential Vault entries (metadata only) so onboarding pickers auto-populate \u2014 never reads the secret"
+      },
+      {
+        "name": "settings:objects:read",
+        "comment": "wizard: read anomaly-detection metric-event detectors"
+      },
+      {
+        "name": "settings:objects:write",
+        "comment": "wizard: turn anomaly detectors on/off"
+      },
+      {
+        "name": "state:app-states:read",
+        "comment": "read the device\u2192site map (app-owned site grouping)"
+      },
+      {
+        "name": "state:app-states:write",
+        "comment": "save customer device\u2192site assignments"
+      }
+    ]
+  }
+}

@@ -1,0 +1,19 @@
+name: custom:cno.network.compliance
+version: 0.0.5
+minDynatraceVersion: "1.301.0"
+author:
+  name: Viet Pham
+
+# Oxidized/Git -> Dynatrace COMPLIANCE + config-change extension (remote / ActiveGate).
+# Ports config_capture.py's read/evaluate path: reads the device running-configs Oxidized captures
+# into its Git-backed archive, evaluates ISO-27001:2022 controls + drift vs a golden baseline, and
+# ships network.compliance + network.config LOGS to Grail. (The lab's simulate-a-change demo path
+# is intentionally not ported — a real deployment reads Oxidized's actual archive.)
+python:
+  runtime:
+    module: oxidized_extension
+    version:
+      min: "3.10"
+  activation:
+    remote:
+      path: activationSchema.json
