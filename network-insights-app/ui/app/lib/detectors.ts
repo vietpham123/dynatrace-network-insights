@@ -1,4 +1,4 @@
-// Generated from deploy/alerting/detectors.json — the detector payloads the Detection card
+// Generated from workflows/detectors.json — the detector payloads the Detection card
 // installs via the provision function (createDetectors). executionSettings:{} lets the API
 // fill the actor, so nothing tenant-specific is baked in. Regenerate from detectors.json.
 //

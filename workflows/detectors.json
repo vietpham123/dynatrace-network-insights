@@ -1,0 +1,192 @@
+[
+  {
+    "schemaId": "builtin:davis.anomaly-detectors",
+    "scope": "environment",
+    "value": {
+      "analyzer": {
+        "input": [
+          {
+            "key": "query",
+            "value": "timeseries errs=sum(cno.if.in_errors.count, rate:1m), by:{sys_name, if_descr, `device.address`}"
+          },
+          {
+            "key": "threshold",
+            "value": "60"
+          },
+          {
+            "key": "alertCondition",
+            "value": "ABOVE"
+          },
+          {
+            "key": "alertOnMissingData",
+            "value": "false"
+          },
+          {
+            "key": "violatingSamples",
+            "value": "3"
+          },
+          {
+            "key": "slidingWindow",
+            "value": "5"
+          },
+          {
+            "key": "dealertingSamples",
+            "value": "5"
+          }
+        ],
+        "name": "dt.statistics.ui.anomaly_detection.StaticThresholdAnomalyDetectionAnalyzer"
+      },
+      "description": "Interface accumulating errors at a high rate (dirty optic / CRC). Signature: bad-link.",
+      "enabled": true,
+      "eventTemplate": {
+        "properties": [
+          {
+            "key": "event.name",
+            "value": "Interface error burst"
+          },
+          {
+            "key": "event.description",
+            "value": "Interface accumulating errors at a high rate (dirty optic / CRC). Signature: bad-link."
+          },
+          {
+            "key": "event.type",
+            "value": "CUSTOM_ALERT"
+          },
+          {
+            "key": "cno.signature",
+            "value": "bad-link"
+          }
+        ]
+      },
+      "source": "cno",
+      "title": "CNO - Interface error burst",
+      "executionSettings": {}
+    }
+  },
+  {
+    "schemaId": "builtin:davis.anomaly-detectors",
+    "scope": "environment",
+    "value": {
+      "analyzer": {
+        "input": [
+          {
+            "key": "query",
+            "value": "fetch logs | filter log.source == \"network.compliance\" and in(`compliance.status`, {\"capture_failed\", \"archive_empty\", \"archive_stale_refused\", \"archive_unreachable\"}) | makeTimeseries failures = count(), by:{`host.name`}, interval:5m"
+          },
+          {
+            "key": "threshold",
+            "value": "0"
+          },
+          {
+            "key": "alertCondition",
+            "value": "ABOVE"
+          },
+          {
+            "key": "alertOnMissingData",
+            "value": "false"
+          },
+          {
+            "key": "violatingSamples",
+            "value": "1"
+          },
+          {
+            "key": "slidingWindow",
+            "value": "3"
+          },
+          {
+            "key": "dealertingSamples",
+            "value": "3"
+          }
+        ],
+        "name": "dt.statistics.ui.anomaly_detection.StaticThresholdAnomalyDetectionAnalyzer"
+      },
+      "description": "Oxidized could not produce a usable running-config for a device, so its ISO-27001 controls are ungraded. NOTE severity is carried in `loglevel`, not `severity` — a detector filtering on `severity` matches nothing. Statuses: capture_failed, archive_empty, archive_stale_refused, archive_unreachable.",
+      "enabled": true,
+      "eventTemplate": {
+        "properties": [
+          {
+            "key": "event.name",
+            "value": "Config capture failed"
+          },
+          {
+            "key": "event.description",
+            "value": "Oxidized could not produce a usable running-config for a device, so its ISO-27001 controls are ungraded. NOTE severity is carried in `loglevel`, not `severity` — a detector filtering on `severity` matches nothing. Statuses: capture_failed, archive_empty, archive_stale_refused, archive_unreachable."
+          }
+        ],
+        "davis": {
+          "merge": true,
+          "status": "ERROR"
+        },
+        "description": "Oxidized could not produce a usable running-config for a device, so its ISO-27001 controls are ungraded. NOTE severity is carried in `loglevel`, not `severity` — a detector filtering on `severity` matches nothing. Statuses: capture_failed, archive_empty, archive_stale_refused, archive_unreachable.",
+        "eventType": "AVAILABILITY_EVENT",
+        "title": "Config capture failed"
+      },
+      "executionSettings": {},
+      "title": "CNO - Config capture failed",
+      "source": "cno"
+    }
+  },
+  {
+    "schemaId": "builtin:davis.anomaly-detectors",
+    "scope": "environment",
+    "value": {
+      "analyzer": {
+        "input": [
+          {
+            "key": "query",
+            "value": "fetch logs | filter log.source == \"network.config\" and `config.drift_from_golden` == \"yes\" | makeTimeseries drifted = count(), by:{`host.name`}, interval:5m"
+          },
+          {
+            "key": "threshold",
+            "value": "0"
+          },
+          {
+            "key": "alertCondition",
+            "value": "ABOVE"
+          },
+          {
+            "key": "alertOnMissingData",
+            "value": "false"
+          },
+          {
+            "key": "violatingSamples",
+            "value": "1"
+          },
+          {
+            "key": "slidingWindow",
+            "value": "3"
+          },
+          {
+            "key": "dealertingSamples",
+            "value": "3"
+          }
+        ],
+        "name": "dt.statistics.ui.anomaly_detection.StaticThresholdAnomalyDetectionAnalyzer"
+      },
+      "description": "A device's running-config no longer matches its golden baseline. The diff is on the network.config record. Proven end to end on real hardware 2026-08-02 — detection AND clearance — but nothing was watching it until now.",
+      "enabled": true,
+      "eventTemplate": {
+        "properties": [
+          {
+            "key": "event.name",
+            "value": "Device config drifted from golden"
+          },
+          {
+            "key": "event.description",
+            "value": "A device's running-config no longer matches its golden baseline. The diff is on the network.config record. Proven end to end on real hardware 2026-08-02 — detection AND clearance — but nothing was watching it until now."
+          }
+        ],
+        "davis": {
+          "merge": true,
+          "status": "ERROR"
+        },
+        "description": "A device's running-config no longer matches its golden baseline. The diff is on the network.config record. Proven end to end on real hardware 2026-08-02 — detection AND clearance — but nothing was watching it until now.",
+        "eventType": "AVAILABILITY_EVENT",
+        "title": "Device config drifted from golden"
+      },
+      "executionSettings": {},
+      "title": "CNO - Device config drifted from golden",
+      "source": "cno"
+    }
+  }
+]

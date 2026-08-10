@@ -40,10 +40,28 @@ Extension signing is the one procedure worth reading in advance:
 ```
 network-insights-app/    the app — React + TypeScript UI, app functions in api/
 modules/                 five extensions: two declarative (YAML), three Python
+workflows/               AutomationEngine workflows + anomaly detectors
 docs/                    the contract and the deployment guides
 scripts/                 tooling that runs against a real estate
 CLAUDE.md                orientation for an AI coding agent working in this repo
 ```
+
+### The workflows
+
+Detectors find symptoms; workflows decide what they mean. `workflows/` carries both, versioned
+alongside the app because they ship together and an app release that assumes a workflow change is
+broken without it.
+
+| File | What it is |
+|---|---|
+| `network_rca_workflow.json` | Network RCA — classifies each device, walks the topology, raises one root cause and suppresses downstream symptoms |
+| `suppress_workflow.json` | Dependency suppression |
+| `interface_degradation_workflow.json` | Per-device interface degradation |
+| `detectors.json` + `create_detectors.js` | The anomaly detectors the workflows consume |
+
+The app carries TypeScript copies of the RCA workflow and the detector payloads
+(`ui/app/lib/networkRcaWorkflow.ts`, `detectors.ts`) so it can offer them for deployment. **They are
+two copies of one thing and are kept in sync by hand** — if you edit the JSON, edit the TS.
 
 ### The five extensions
 

@@ -3,7 +3,7 @@
 // ports down -> one consolidated card). Replaces the separate device + interface defs. Disabled by default.
 // A deterministic narrative is always written so the card reads well; Davis CoPilot enriches it best-effort
 // (403 where CoPilot is not enabled). Regenerate from the live workflow after edits.
-export const NETWORK_RCA_WORKFLOW: any = /* KEEP IN SYNC with deploy/alerting/network_rca_workflow.json — they are two copies of one
+export const NETWORK_RCA_WORKFLOW: any = /* KEEP IN SYNC with workflows/network_rca_workflow.json — they are two copies of one
    workflow and they DID drift: the sys_name hardening was applied to the JSON only, so the app's
    RCA card (which builds from THIS file) would have created the unhardened version for a
    customer. A device with no usable sysName — a real Netgear returns the literal string "n/a" —

@@ -1,0 +1,93 @@
+{
+  "title": "CNO - Network Dependency Suppression",
+  "description": "Storm-to-story v3: graph from NetBox edges; resolves each root's specific entity and targets it with a stable title so re-posting RENEWS one problem (fixes the 29-duplicate storm). Complements Davis native correlation (adds deterministic/graph-based + power-domain root cause).",
+  "isPrivate": false,
+  "tasks": {
+    "edges": {
+      "action": "dynatrace.automations:execute-dql-query",
+      "conditions": {},
+      "input": {
+        "query": "timeseries e=count(cno.dep.uses), by:{`device.name`, `upstream.name`, link_type}, from:-2h | fieldsAdd n=arraySum(e) | filter n>0 | fields downstream=lower(`device.name`), upstream=lower(`upstream.name`), link_type"
+      },
+      "name": "edges",
+      "position": {
+        "x": 1,
+        "y": 1
+      }
+    },
+    "entities": {
+      "action": "dynatrace.automations:execute-dql-query",
+      "conditions": {},
+      "input": {
+        "query": "timeseries s=count(cno.if.oper_status), by:{sys_name, `dt.entity.network:device`}, from:-2h | fieldsAdd n=arraySum(s) | filter n>0 | fields device=lower(sys_name), entityId=`dt.entity.network:device` | dedup device"
+      },
+      "name": "entities",
+      "position": {
+        "x": 2,
+        "y": 1
+      }
+    },
+    "evidence": {
+      "action": "dynatrace.automations:execute-dql-query",
+      "conditions": {},
+      "input": {
+        "query": "fetch logs, from:-45m | filter `log.source` == \"network.config\" or `log.source` == \"cisco.syslog\" | sort timestamp desc | fields ts=formatTimestamp(timestamp, format:\"HH:mm:ss\"), src=`log.source`, dev=lower(`host.name`), msg=substring(content, from:0, to:150) | limit 40"
+      },
+      "name": "evidence",
+      "position": {
+        "x": 3,
+        "y": 1
+      }
+    },
+    "reach": {
+      "action": "dynatrace.automations:execute-dql-query",
+      "conditions": {},
+      "input": {
+        "query": "timeseries s=count(cno.if.oper_status), by:{sys_name}, from:-2m | fieldsAdd device=lower(sys_name), is_up=if(arraySum(s)>0,1,else:0) | fields device, is_up"
+      },
+      "name": "reach",
+      "position": {
+        "x": 0,
+        "y": 1
+      }
+    },
+    "suppress": {
+      "action": "dynatrace.automations:run-javascript",
+      "conditions": {
+        "states": {
+          "edges": "OK",
+          "entities": "OK",
+          "evidence": "OK",
+          "reach": "OK"
+        }
+      },
+      "input": {
+        "script": "import { execution } from '@dynatrace-sdk/automation-utils';\nimport { eventsClient, EventIngestEventType } from '@dynatrace-sdk/client-classic-environment-v2';\nimport { httpClient } from '@dynatrace-sdk/http-client';\n\n// CNO Network Dependency Suppression v3 \u2014 graph from NetBox-declared edges (cno.dep.uses),\n// with the storm defect fixed. v2 emitted against the broad type(\"network:device\") selector\n// with a title that varied by suppressed-count, so Davis could not dedup and opened a NEW\n// problem every poll (29 duplicates observed 2026-07-23). v3:\n//   * resolves each root's SPECIFIC entityId (from a 2h name->entity map that survives the\n//     outage) and targets entityId(\"CUSTOM_DEVICE-..\") \u2014 the event lands ON the root device;\n//   * uses a STABLE title per root (\"Network root cause: X down\") \u2014 suppression detail moves\n//     to properties, which update the open problem instead of forking a new one;\n//   * timeout tuned just above the poll interval so re-posting RENEWS one problem and it\n//     auto-resolves ~timeout after recovery.\n// Three DQL results in: reach (who answers), edges (the graph), entities (name->entityId).\n\nexport default async function ({ executionId }) {\n  const ex = await execution(executionId);\n  const reach = await ex.result('reach');\n  const edgesR = await ex.result('edges');\n  const entsR = await ex.result('entities');\n  const evR = await ex.result('evidence');\n\n  \n  const norm = s => String(s || '').toLowerCase();\n\n  // name -> entityId (2h window so a currently-down device still resolves from pre-outage data)\n  const entOf = {};\n  for (const r of (entsR.records || [])) {\n    const d = norm(r['device']); if (d && r['entityId']) entOf[d] = r['entityId'];\n  }\n\n  const ROSTER = Object.keys(entOf);\n  const dev = {};\n  for (const d of ROSTER) dev[d] = { up: new Set(), entityId: entOf[d] || null, isUp: false };\n  const answering = new Set();\n  for (const r of (reach.records || [])) {\n    const d = norm(r['device']);\n    if (!dev[d]) continue;\n    if (r['is_up'] === 1 || r['is_up'] === '1' || r['is_up'] === true) answering.add(d);\n  }\n  for (const d of ROSTER) dev[d].isUp = answering.has(d);\n  for (const r of (edgesR.records || [])) {\n    const d = norm(r['downstream']); const u = norm(r['upstream']);\n    if (!d || !u) continue;\n    dev[d] = dev[d] || { up: new Set(), entityId: entOf[d] || null, isUp: true };\n    dev[u] = dev[u] || { up: new Set(), entityId: entOf[u] || null, isUp: true };\n    dev[d].up.add(u);\n  }\n\n  const isDown = d => dev[d] && dev[d].isUp === false;\n  const roots = [], suppressed = [];\n  for (const [d, n] of Object.entries(dev)) {\n    if (!isDown(d)) continue;\n    const anyUpstreamDown = [...n.up].some(u => isDown(u));\n    if (anyUpstreamDown) suppressed.push(d); else roots.push(d);\n  }\n\n  const descendantsOf = root => {\n    const out = new Set(); const stack = [root];\n    while (stack.length) {\n      const cur = stack.pop();\n      for (const [d, n] of Object.entries(dev))\n        if (n.up.has(cur) && !out.has(d)) { out.add(d); stack.push(d); }\n    }\n    return [...out].filter(isDown);\n  };\n\n  const results = [];\n  for (const root of roots) {\n    const kids = descendantsOf(root);\n    const entityId = dev[root].entityId;\n    const _n = root.toLowerCase();\n    const _fault = /pdu|ups/.test(_n) ? 'power-domain' : /sdwan|8200/.test(_n) ? 'wan-isolation' : 'device-failure';\n    const title = _fault==='power-domain' ? `Power domain failure: ${root}`\n      : _fault==='wan-isolation' ? `Site isolated: WAN edge ${root} down`\n      : `Device failure: ${root} down`;   // STABLE per root+type (dedup key)\n    const props = {\n      'event.description': `${root} is the causal failure (graph source: NetBox declared edges). ` +\n        `Suppressed downstream symptoms: ${kids.join(', ') || '(none)'}.`,\n      'cno.root_cause': root,\n      'cno.fault_type': _fault,\n      'cno.blast_radius': String(kids.length),\n      'cno.suppressed': kids.join(',') || '(none)',\n      'cno.suppressed_count': String(kids.length),\n      'dt.event.group_label': `cno-root-cause-${root}`,   // stable correlation hint\n    };\n    Object.keys(props).forEach(k => { if (!props[k]) delete props[k]; });\n    try {\n      const _aff = new Set([root, ...kids].map(x => norm(x)));\n      const _chg = (evR.records || []).filter(r => r['src'] === 'network.config').slice(0, 6).map(r => `${r['ts']} config change on ${r['dev']}: ${r['msg']}`);\n      const _log = (evR.records || []).filter(r => r['src'] === 'cisco.syslog' && _aff.has(norm(r['dev']))).slice(0, 6).map(r => `${r['ts']} syslog ${r['dev']}: ${r['msg']}`);\n      const _ev = _chg.concat(_log).join('\\n');\n      const _prompt = `Network NOC incident. Root cause: ${root} (fault type: ${_fault}) is DOWN. Blast radius: ${kids.length} downstream device(s) unreachable${kids.length ? ' - ' + kids.join(', ') : ''}.` + (_ev ? `\\n\\nRecent evidence (config changes across the network + syslog from the affected devices, in the window before the outage):\\n${_ev}` : '') + `\\n\\nIn 2-4 sentences: the root cause, the impact, whether a recent config change likely contributed (change-to-impact - call out if a change touched the affected segment/subnet), and one recommended first action.`;\n      const _r = await httpClient.send({ url: '/platform/davis/copilot/v1/skills/conversations:message', method: 'POST', body: { text: _prompt, context: [] }, headers: { 'Content-Type': 'application/json' } });\n      if (_r.status < 300) { const _b = await _r.body('json'); const _t = _b && _b.text; if (_t) { props['cno.rca_narrative'] = String(_t).slice(0, 1200); props['event.description'] = 'Davis CoPilot - ' + String(_t).replace(/\\n/g, ' ').slice(0, 460) + ' || ' + props['event.description']; } }\n    } catch (e) { /* CoPilot best-effort; card keeps the deterministic RCA */ }\n\n    try {\n      await eventsClient.createEvent({\n        body: {\n          eventType: EventIngestEventType.AvailabilityEvent,\n          title,\n          // target the SPECIFIC root device; fall back only if entity unresolved\n          entitySelector: entityId ? `entityId(\"${entityId}\")` : `type(\"network:device\")`,\n          timeout: 8,   // > 3-min poll -> re-post renews ONE problem; auto-resolves ~8m after recovery\n          properties: props,\n        },\n      });\n      results.push({ root, suppressed: kids, entityId: entityId || '(unresolved)' });\n    } catch (e) {\n      results.push({ root, error: String(e) });\n    }\n  }\n  return { downCount: Object.values(dev).filter(n => n.isUp === false).length,\n           roots, suppressed, emitted: results };\n}\n"
+      },
+      "name": "suppress",
+      "position": {
+        "x": 0,
+        "y": 2
+      },
+      "predecessors": [
+        "reach",
+        "edges",
+        "entities",
+        "evidence"
+      ]
+    }
+  },
+  "trigger": {
+    "schedule": {
+      "filterParameters": {},
+      "inputs": {},
+      "isActive": false,
+      "rule": null,
+      "timezone": "UTC",
+      "trigger": {
+        "intervalMinutes": 3,
+        "type": "interval"
+      }
+    }
+  }
+}

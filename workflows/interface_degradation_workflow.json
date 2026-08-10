@@ -1,0 +1,79 @@
+{
+  "title": "CNO - Interface Degradation RCA",
+  "description": "Lane A: partial interface failure. Per device, if it is UP but has >=1 admin-enabled interface oper-down (cno.if.oper_status==2, admin_status==1), emit ONE consolidated card listing the down interfaces (never one-per-interface; disabled ports excluded). Davis CoPilot adds a narrative. Complements Lane B (CNO - Network Dependency Suppression), which handles device/chain outages.",
+  "isPrivate": false,
+  "tasks": {
+    "classify": {
+      "action": "dynatrace.automations:execute-dql-query",
+      "conditions": {},
+      "input": {
+        "query": "timeseries oper = avg(cno.if.oper_status), admin = avg(cno.if.admin_status), by:{sys_name, if_descr}, from:-5m\n| fieldsAdd o = arrayLast(oper), a = arrayLast(admin), device = lower(sys_name)\n| filter isNotNull(o) and a == 1\n| summarize down_list = collectArray(if(o==2, if_descr)), up = countIf(o==1), down = countIf(o==2), by:{device}\n| fieldsAdd down_list = arrayRemoveNulls(down_list)\n| filter up > 0 and down > 0\n| sort down desc"
+      },
+      "name": "classify",
+      "position": {
+        "x": 0,
+        "y": 1
+      }
+    },
+    "entities": {
+      "action": "dynatrace.automations:execute-dql-query",
+      "conditions": {},
+      "input": {
+        "query": "timeseries s=count(cno.if.oper_status), by:{sys_name, `dt.entity.network:device`}, from:-2h | fieldsAdd n=arraySum(s) | filter n>0 | fields device=lower(sys_name), entityId=`dt.entity.network:device` | dedup device"
+      },
+      "name": "entities",
+      "position": {
+        "x": 1,
+        "y": 1
+      }
+    },
+    "evidence": {
+      "action": "dynatrace.automations:execute-dql-query",
+      "conditions": {},
+      "input": {
+        "query": "fetch logs, from:-45m | filter `log.source` == \"network.config\" or `log.source` == \"cisco.syslog\" | sort timestamp desc | fields ts=formatTimestamp(timestamp, format:\"HH:mm:ss\"), src=`log.source`, dev=lower(`host.name`), msg=substring(content, from:0, to:150) | limit 40"
+      },
+      "name": "evidence",
+      "position": {
+        "x": 2,
+        "y": 1
+      }
+    },
+    "emit": {
+      "action": "dynatrace.automations:run-javascript",
+      "conditions": {
+        "states": {
+          "classify": "OK",
+          "entities": "OK",
+          "evidence": "OK"
+        }
+      },
+      "input": {
+        "script": "import { execution } from '@dynatrace-sdk/automation-utils';\nimport { eventsClient, EventIngestEventType } from '@dynatrace-sdk/client-classic-environment-v2';\nimport { httpClient } from '@dynatrace-sdk/http-client';\n\n// CNO Interface Degradation RCA (Lane A) \u2014 partial interface failure on an otherwise-UP device.\n// A down interface reports cno.if.oper_status==2 (RAW ifOperStatus; up==1). admin_status==1 filters\n// to enabled ports, so admin-down/disabled ports (a large normal baseline) never false-fire. The\n// device keeps answering SNMP, so the device/chain workflow (Lane B) correctly stays silent.\n// Emits ONE consolidated card per partial device \u2014 down-interface list in properties, STABLE title\n// so Davis renews a single problem instead of one-per-interface (no storm). Davis CoPilot adds a\n// best-effort narrative (cause / config-change contribution / first action), same as Lane B.\nexport default async function ({ executionId }) {\n  const ex = await execution(executionId);\n  const cls = await ex.result('classify');\n  const ents = await ex.result('entities');\n  const evR = await ex.result('evidence');\n  const norm = s => String(s || '').toLowerCase();\n\n  const entOf = {};\n  for (const r of ((ents && ents.records) || [])) {\n    const d = norm(r['device']); if (d && r['entityId']) entOf[d] = r['entityId'];\n  }\n\n  const results = [];\n  for (const r of ((cls && cls.records) || [])) {\n    const device = norm(r['device']);\n    const down = Number(r['down'] || 0);\n    const up = Number(r['up'] || 0);\n    const list = Array.isArray(r['down_list']) ? r['down_list'] : [];\n    const entityId = entOf[device] || null;\n    if (!device || down < 1) continue;\n\n    const title = `Interface degradation on ${device}`;   // STABLE (dedup key) \u2014 detail in props\n    const props = {\n      'event.description': `${device} is UP but ${down} admin-enabled interface(s) are ` +\n        `operationally down: ${list.join(', ') || '(unnamed)'}. ${up} enabled interface(s) still up. ` +\n        `Disabled/admin-down ports are excluded (not a fault). Device reachable \u2014 no device-level ` +\n        `outage, so Lane B stays silent.`,\n      'cno.device': device,\n      'cno.iface_down_count': String(down),\n      'cno.iface_down_list': list.join(',') || '(unnamed)',\n      'cno.iface_up_count': String(up),\n      'cno.severity_hint': down >= 3 ? 'high' : 'low',\n      'dt.event.group_label': `cno-iface-degradation-${device}`,\n    };\n    Object.keys(props).forEach(k => { if (!props[k]) delete props[k]; });\n\n    // Davis CoPilot narrative \u2014 best effort; card keeps the deterministic detail if it fails.\n    try {\n      const _chg = (evR.records || []).filter(r2 => r2['src'] === 'network.config' && norm(r2['dev']) === device)\n        .slice(0, 6).map(r2 => `${r2['ts']} config change on ${r2['dev']}: ${r2['msg']}`);\n      const _log = (evR.records || []).filter(r2 => r2['src'] === 'cisco.syslog' && norm(r2['dev']) === device)\n        .slice(0, 8).map(r2 => `${r2['ts']} syslog ${r2['dev']}: ${r2['msg']}`);\n      const _ev = _chg.concat(_log).join('\\n');\n      const _prompt = `Network interface degradation. Device ${device} is UP and reachable via SNMP, ` +\n        `but ${down} admin-enabled interface(s) are operationally down: ${list.join(', ')}. ${up} ` +\n        `interface(s) remain up \u2014 this is a PARTIAL failure, NOT a device outage.` +\n        (_ev ? `\\n\\nRecent evidence (config changes + syslog from ${device}):\\n${_ev}` : '') +\n        `\\n\\nIn 2-3 sentences: the most likely cause for these specific interfaces (cabling / SFP / ` +\n        `far-end device / local port config), whether a recent config change on this device likely ` +\n        `contributed, and one recommended first action. The device itself is reachable \u2014 do NOT ` +\n        `describe it as down.`;\n      const _r = await httpClient.send({ url: '/platform/davis/copilot/v1/skills/conversations:message', method: 'POST', body: { text: _prompt, context: [] }, headers: { 'Content-Type': 'application/json' } });\n      if (_r.status < 300) { const _b = await _r.body('json'); const _t = _b && _b.text; if (_t) { props['cno.rca_narrative'] = String(_t).slice(0, 1200); props['event.description'] = 'Davis CoPilot - ' + String(_t).replace(/\\n/g, ' ').slice(0, 460) + ' || ' + props['event.description']; } }\n    } catch (e) { /* CoPilot best-effort */ }\n\n    try {\n      await eventsClient.createEvent({\n        body: {\n          eventType: EventIngestEventType.AvailabilityEvent,\n          title,\n          entitySelector: entityId ? `entityId(\"${entityId}\")` : `type(\"network:device\")`,\n          timeout: 8,   // > 3-min poll -> re-post renews ONE problem; auto-resolves ~8m after recovery\n          properties: props,\n        },\n      });\n      results.push({ device, down, up, entityId: entityId || '(unresolved)' });\n    } catch (e) {\n      results.push({ device, error: String(e) });\n    }\n  }\n  return { partialDevices: ((cls && cls.records) || []).length, emitted: results };\n}\n"
+      },
+      "name": "emit",
+      "position": {
+        "x": 0,
+        "y": 2
+      },
+      "predecessors": [
+        "classify",
+        "entities",
+        "evidence"
+      ]
+    }
+  },
+  "trigger": {
+    "schedule": {
+      "filterParameters": {},
+      "inputs": {},
+      "isActive": false,
+      "rule": null,
+      "timezone": "UTC",
+      "trigger": {
+        "intervalMinutes": 3,
+        "type": "interval"
+      }
+    }
+  }
+}
