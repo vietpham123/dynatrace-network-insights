@@ -16,7 +16,7 @@ your environment.
 |---|---|
 | `network-insights-app/` | The app: React + TypeScript UI, plus app functions in `api/` |
 | `modules/` | Five extensions. Two declarative (YAML), three Python |
-| `docs/` | The contract, deployment guides, sizing |
+| `docs/` | The contract and the deployment guides |
 | `scripts/` | Operational tooling that runs against a real estate |
 
 ## The one thing to understand before writing code

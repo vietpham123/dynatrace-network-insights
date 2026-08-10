@@ -35,7 +35,7 @@ Extension signing is the one procedure worth reading in advance:
 ```
 network-insights-app/    the app — React + TypeScript UI, app functions in api/
 modules/                 five extensions: two declarative (YAML), three Python
-docs/                    the contract, the two guides, sizing
+docs/                    the contract and the deployment guides
 scripts/                 tooling that runs against a real estate
 CLAUDE.md                orientation for an AI coding agent working in this repo
 ```
