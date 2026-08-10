@@ -7,6 +7,11 @@ certificates.
 
 Nothing here is a hosted service. Everything runs in your environment.
 
+> **This is not an official Dynatrace product.** It is an independent open-source project that runs
+> on Dynatrace, licensed under Apache 2.0 and provided as-is. Dynatrace does not support, endorse or
+> maintain it, and it is outside your Dynatrace support agreement — raising a Dynatrace support
+> ticket about it will not get you anywhere. Issues and pull requests here are the route.
+
 ---
 
 ## Start here

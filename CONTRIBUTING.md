@@ -77,8 +77,14 @@ mechanics that differ.
 
 ## Reporting something sensitive
 
-Please do not open a public issue for a suspected security problem. Contact your Dynatrace
-representative directly.
+Please do not open a public issue for a suspected security problem. Raise it privately with the
+maintainer.
+
+## This is not a Dynatrace product
+
+It runs on Dynatrace and is written by a Dynatrace employee, but it is an independent open-source
+project provided as-is under Apache 2.0. Dynatrace does not support, endorse or maintain it, and it
+sits outside your Dynatrace support agreement. Issues and pull requests here are the route.
 
 ## Licence
 

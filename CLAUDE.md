@@ -12,6 +12,10 @@ read `docs/METRIC-CONTRACT.md` before writing any code that produces data.*
 it. You deploy both into your own Dynatrace tenant. Nothing here is a SaaS service; it all runs in
 your environment.
 
+It is an **independent open-source project**, not an official Dynatrace product — Apache 2.0,
+provided as-is, not covered by any Dynatrace support agreement. Do not describe it to a user as
+supported or endorsed by Dynatrace.
+
 | Directory | What's in it |
 |---|---|
 | `network-insights-app/` | The app: React + TypeScript UI, plus app functions in `api/` |
