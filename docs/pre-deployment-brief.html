@@ -219,14 +219,24 @@
   <div class="outcomes">
     <div class="outcome"><b>No overlap</b><span>Proceed. This is the common case for a single
       well-run estate.</span></div>
-    <div class="outcome"><b>Overlap exists</b><span>Resolve it first: NAT at the interconnect,
-      VRF-unique management addressing, or poll each estate from its own ActiveGate group.</span></div>
+    <div class="outcome"><b>Overlap exists</b><span>It has to be resolved in the network before
+      onboarding &mdash; NAT at the interconnect, or VRF-unique management addressing. There is no
+      setting for this.</span></div>
     <div class="outcome"><b>Nobody is sure</b><span>Treat that as yes. Scope the first deployment to
       one site you <em>can</em> vouch for, and widen once you know.</span></div>
   </div>
-  <p style="margin-top:14px"><b>Topology is already safe.</b> Adjacency joins on the LLDP chassis
-     ID, not on IP, precisely because overlapping ranges are legitimate. It is device identity, not
-     link discovery, that is at risk.</p>
+  <div class="callout warn" style="margin:16px 0 0">
+    <h4>To be explicit: overlapping address space is not supported</h4>
+    <p>Entity identity is the management address and nothing else &mdash;
+       <code>network_device_{device.address}</code>. There is no scope, tenant or ActiveGate-group
+       qualifier that lets two devices share an address, and adding one would be a change to the
+       extension rather than a configuration option. <b>Do not plan a deployment on the assumption
+       that separate ActiveGate groups keep overlapping estates apart. They do not.</b></p>
+  </div>
+  <p style="margin-top:14px"><b>Topology is the exception, and it is the reason this gets
+     misremembered.</b> Adjacency joins on the LLDP chassis ID, not on IP, precisely because
+     overlapping ranges are legitimate &mdash; so link discovery survives overlap perfectly well.
+     Device <em>identity</em> does not. The two behave differently and only one of them is safe.</p>
 </div>
 
 <h2 id="d2">2. How large is the first deployment?</h2>
@@ -271,10 +281,10 @@
      the bill. It is also the highest-value data in the product &mdash; it is what answers "who is
      talking to whom" &mdash; so the question is not whether to collect it but how much.</p>
   <div class="outcomes">
-    <div class="outcome"><b>Full</b><span>Every flow record. Highest fidelity, highest cost.</span></div>
-    <div class="outcome"><b>Aggregated</b><span>Rolled up before ingest. Most estates land here.</span></div>
-    <div class="outcome"><b>Sampled</b><span>A fraction of records. Cheapest; fine for trend and
-      top-talker work, weaker for forensics.</span></div>
+    <div class="outcome"><b>Full</b><span>Every flow record. Highest fidelity, full per-interface
+      drill-down. The default.</span></div>
+    <div class="outcome"><b>Sampled</b><span>Keep 1-in-N, for very high-rate links. Volumes are
+      extrapolated from each exporter's stamped sampling rate.</span></div>
   </div>
   <p style="margin-top:14px">You pick this when you set up the collector, and you can change it
      afterwards. The app's look-back picker defaults deliberately tight to bound query cost as
