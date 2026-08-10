@@ -112,12 +112,27 @@ def check(req: dict, device, context, window, print_only):
         return {"metric": metric, "state": "error", "detail": r["_error"]}
     series = int(r.get("series") or 0)
     missing = int(r.get("missingDims") or 0)
+    complete = series - missing
     if series == 0:
         return {"metric": metric, "state": "absent",
                 "detail": f"no data in the last {window.lstrip('-')}"}
+    # A SERIES WITHOUT THE FULL DIMENSION SET IS NOT NECESSARILY BROKEN, and treating it that way
+    # made this tool cry wolf the first time it ran against a real tenant: four sdwan-api devices
+    # emit cno.if.oper_status with sys_name and device.address but no if_index, because that bridge
+    # reports device REACHABILITY, not per-interface state. They satisfy `roster` exactly as
+    # intended and were never candidates for `interfaces` — but the tier came back FAIL and named
+    # them as defects.
+    #
+    # So the question a tier asks is "does data meeting this shape exist", not "does every series
+    # carrying this metric meet it". Zero complete series fails; some complete series passes, and
+    # the remainder is reported as context rather than as a fault.
+    if complete == 0:
+        return {"metric": metric, "state": "absent",
+                "detail": f"{series} series, none carrying all of: {', '.join(dims)}"}
     if missing:
-        return {"metric": metric, "state": "partial",
-                "detail": f"{series} series, but {missing} are missing one of: {', '.join(dims)}"}
+        return {"metric": metric, "state": "ok", "partial": True,
+                "detail": f"{complete} of {series} series carry all dimensions; "
+                          f"{missing} device-level only"}
     return {"metric": metric, "state": "ok", "detail": f"{series} series"}
 
 
@@ -181,6 +196,8 @@ def _run_tiers(contract, args, satisfied, failed):
         print(f"  {mark}  {tier['id']:<14} {DIM}{tier['unlocks']}{RESET}")
         for r in results_any + results_all:
             if r["state"] == "ok" and ok:
+                if r.get("partial"):
+                    print(f"          {DIM}note      {r['metric']}  {r['detail']}{RESET}")
                 continue
             colour = {"ok": GREEN, "partial": YELLOW, "absent": DIM, "error": RED}[r["state"]]
             print(f"          {colour}{r['state']:<8}{RESET} {r['metric']}  {DIM}{r['detail']}{RESET}")

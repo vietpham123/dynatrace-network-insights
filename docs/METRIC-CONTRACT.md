@@ -236,6 +236,13 @@ The app cannot tell the difference between those devices and SNMP-polled ones. T
 working as intended, and it's the shortest path to understanding it — read that file before writing
 your own.
 
+**It also shows that stopping early is normal.** Measured on a live tenant: those SD-WAN devices
+satisfy **roster** and **topology** and nothing else. They report device reachability, not
+per-interface state, so they carry no `if_index` and do not satisfy the interfaces tier — by design,
+not by omission. They appear in the fleet, they are counted, they filter by site and role, they show
+liveness, and they draw the hub-and-spoke fabric in Topology. That is a complete and useful
+integration built from two tiers.
+
 ---
 
 ## Six things that fail silently
