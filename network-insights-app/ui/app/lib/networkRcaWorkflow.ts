@@ -19,7 +19,7 @@ export const NETWORK_RCA_WORKFLOW: any = {
       "action": "dynatrace.automations:execute-dql-query",
       "conditions": {},
       "input": {
-        "query": "timeseries s=count(cno.if.oper_status), by:{sys_name, `device.address`}, from:-2m | fieldsAdd device=if(isNotNull(sys_name) and sys_name != \"n/a\" and sys_name != \"\", lower(sys_name), else: `device.address`), is_up=if(arraySum(s)>0,1,else:0) | fields device, is_up"
+        "query": "timeseries upt=count(cno.device.uptime), by:{sys_name, `device.address`}, from:-2m | fields device=if(isNotNull(sys_name) and sys_name != \"n/a\" and sys_name != \"\", lower(sys_name), else: `device.address`), n=arraySum(upt) | append [ timeseries seen=count(cno.if.oper_status), by:{sys_name, `device.address`}, from:-2m | fields device=if(isNotNull(sys_name) and sys_name != \"n/a\" and sys_name != \"\", lower(sys_name), else: `device.address`), n=arraySum(seen) ] | summarize n=sum(n), by:{device} | fieldsAdd is_up=if(n>0,1,else:0) | fields device, is_up"
       },
       "name": "reach",
       "position": {
@@ -43,7 +43,7 @@ export const NETWORK_RCA_WORKFLOW: any = {
       "action": "dynatrace.automations:execute-dql-query",
       "conditions": {},
       "input": {
-        "query": "timeseries s=count(cno.if.oper_status), by:{sys_name, `device.address`, `dt.entity.network:device`}, from:-2h | fieldsAdd n=arraySum(s) | filter n>0 | fields device=if(isNotNull(sys_name) and sys_name != \"n/a\" and sys_name != \"\", lower(sys_name), else: `device.address`), entityId=`dt.entity.network:device` | dedup device"
+        "query": "timeseries upt=count(cno.device.uptime), by:{sys_name, `device.address`, `dt.entity.network:device`}, from:-2h | fields device=if(isNotNull(sys_name) and sys_name != \"n/a\" and sys_name != \"\", lower(sys_name), else: `device.address`), entityId=`dt.entity.network:device`, n=arraySum(upt) | append [ timeseries seen=count(cno.if.oper_status), by:{sys_name, `device.address`, `dt.entity.network:device`}, from:-2h | fields device=if(isNotNull(sys_name) and sys_name != \"n/a\" and sys_name != \"\", lower(sys_name), else: `device.address`), entityId=`dt.entity.network:device`, n=arraySum(seen) ] | summarize n=sum(n), by:{device, entityId} | filter n>0 | dedup device"
       },
       "name": "entities",
       "position": {

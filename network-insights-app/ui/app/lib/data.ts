@@ -78,6 +78,22 @@ export function entityLink(entityId?: string): string {
 // Measured: that form returned the two switches and silently omitted the UPS, i.e. it reproduced
 // the exact bug it was meant to fix. `nonempty:false` does not change it. Appending two separate
 // timeseries and summarising keeps devices that appear in only one.
+// THE ONE DEFINITION OF "IS THIS DEVICE REPORTING".
+//
+// Exported because it was implemented three times and fixed once. On 2026-08-03 the roster below
+// was corrected for the UPS problem; lib/lifecycle.ts and the RCA workflow's `reach`/`entities`
+// sat two files away, kept asking `cno.if.oper_status` alone, and stayed broken until 2026-08-11
+// — by which point the Devices page listed a UPS while the lifecycle logic could not see it and
+// the RCA could never observe it as down. Three answers to one question.
+//
+// Anything deciding whether a device is reporting builds its query from THIS, so the next change
+// happens once. Callers supply the window and the dimensions they need.
+export const livenessUnion = (window: string, by: string, fields: string) =>
+  `timeseries upt=count(cno.device.uptime), by:{${by}}, from:${window}
+| fields ${fields}, n=arraySum(upt)
+| append [ timeseries seen=count(cno.if.oper_status), by:{${by}}, from:${window}
+           | fields ${fields}, n=arraySum(seen) ]`;
+
 const ROSTER_DQL = `timeseries upt=count(cno.device.uptime), by:{sys_name, \`device.address\`}, from:-24h
 | fields device=sys_name, ip=\`device.address\`, n=arraySum(upt)
 | append [ timeseries seen=count(cno.if.oper_status), by:{sys_name, \`device.address\`}, from:-24h

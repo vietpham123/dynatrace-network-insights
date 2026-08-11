@@ -2,6 +2,7 @@ import React from "react";
 import { useDql } from "@dynatrace-sdk/react-hooks";
 import { stateClient } from "@dynatrace-sdk/client-state";
 import { useConfiguredDevices } from "./provision";
+import { livenessUnion } from "./data";
 
 /* ============================================================================
    DEVICE LIFECYCLE — intent vs observation
@@ -96,8 +97,12 @@ export function useAcknowledgedDevices() {
   return { acked, acknowledge, unacknowledge };
 }
 
-const LIVE_Q = `timeseries n = count(cno.if.oper_status), from:-10m, by:{ip = \`device.address\`, dev = sys_name}
-  | fieldsAdd n = arraySum(n) | filter n > 0 | fields ip, dev`;
+// A DEVICE WITHOUT INTERFACES IS STILL A DEVICE — see livenessUnion in ./data.
+// This asked `cno.if.oper_status` alone, so a UPS or PDU (no ifTable, and correctly not polled
+// for one since the 0.0.14 feature-set migration) was invisible to lifecycle entirely: listed on
+// the Devices page by the roster, which unions both metrics, yet never "live" here.
+const LIVE_Q = livenessUnion("-10m", "ip = \`device.address\`, dev = sys_name", "ip, dev")
+  + ` | summarize n = sum(n), by:{ip, dev} | filter n > 0 | fields ip, dev`;
 
 /* LAST SEEN, AS BANDS RATHER THAN AN EXACT DATE.
    DQL has arraySize/arrayLast/arrayIndexOf but NO arrayLastIndex, arrayFirstIndex or arraySlice
@@ -110,8 +115,8 @@ const LIVE_Q = `timeseries n = count(cno.if.oper_status), from:-10m, by:{ip = \`
    erase the rest. */
 const BANDS = [1, 7, 30, 90];
 const LAST_SEEN_Q = BANDS.map((d, i) => {
-  const leg = `timeseries n = count(cno.if.oper_status), from:-${d}d, by:{ip = \`device.address\`, dev = sys_name}`
-    + ` | fieldsAdd s = arraySum(n) | filter s > 0 | fields ip, dev, band = ${d}`;
+  const leg = livenessUnion(`-${d}d`, "ip = \`device.address\`, dev = sys_name", "ip, dev")
+    + ` | summarize s = sum(n), by:{ip, dev} | filter s > 0 | fields ip, dev, band = ${d}`;
   return i === 0 ? leg : `| append [ ${leg} ]`;
 }).join(" ") + " | summarize c = count(), by:{ip, dev, band}";
 

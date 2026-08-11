@@ -3,7 +3,7 @@
   "environmentUrl": "https://YOUR-TENANT.apps.dynatrace.com/",
   "app": {
     "name": "Network Insights",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "NetOps observability: device health, NetFlow, topology, compliance, RCA.",
     "id": "my.cno.networkinsights",
     "scopes": [
