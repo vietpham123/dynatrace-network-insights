@@ -10,11 +10,11 @@
 // This was hand-maintained against a "keep in sync" comment until 2026-08-10, at which point four
 // of its six tasks had drifted from the JSON — so the app offered a workflow that was not the one
 // running on the tenant. Hence the generator.
-export const NETWORK_RCA_WORKFLOW_VERSION = "1.2.2";
+export const NETWORK_RCA_WORKFLOW_VERSION = "1.3.0";
 
 export const NETWORK_RCA_WORKFLOW: any = {
   "title": "CNO - Network RCA",
-  "description": "Unified deterministic network reasoner. One classify pass routes each device: not reporting SNMP -> chain RCA (graph root + suppress downstream, power-domain aware); reporting but with admin-enabled interfaces oper-down -> interface RCA (one consolidated card, disabled ports excluded, no storm). Stable titles + entityId targeting so Davis renews one problem each; Davis CoPilot adds a narrative. Replaces the separate device (dependency-suppression) and interface (degradation) workflows. [Network Insights v1.2.2]",
+  "description": "Unified deterministic network reasoner. One classify pass routes each device: not reporting SNMP -> chain RCA (graph root + suppress downstream, power-domain aware); reporting but with admin-enabled interfaces oper-down -> interface RCA (one consolidated card, disabled ports excluded, no storm). Stable titles + entityId targeting so Davis renews one problem each; Davis CoPilot adds a narrative. Replaces the separate device (dependency-suppression) and interface (degradation) workflows. [Network Insights v1.3.0]",
   "isPrivate": false,
   "tasks": {
     "reach": {

@@ -37,6 +37,8 @@ const STORE_KEY = "cno.nav.collapsed";
 export const Sidebar = () => {
   let version = "";
   try { version = getAppVersion(); } catch { /* runtime not available */ }
+  // the platform returns this sentinel when it has no version to give; never render it
+  const ver = version && version !== "dt.missing.app.version" ? version : "";
   // live active-alert count for the Alerts badge (shares the cached Davis query)
   const { rows: problems } = useDavis();
   const activeAlerts = problems.filter((p: any) => p.status === "ACTIVE").length;
@@ -139,11 +141,18 @@ export const Sidebar = () => {
         </div>
       ))}
 
-      {!collapsed && (
-        <div style={{ marginTop: "auto", padding: "12px 11px 6px", borderTop: `1px solid ${t.border}`, color: t.subtle, fontSize: 12 }}>
-          Network Insights{version && version !== "dt.missing.app.version" ? ` · v${version}` : ""}
-        </div>
-      )}
+      {/* The version lives here because "which version am I on" is a footer question, and it sits at
+          the end of a scrolling list — findable, but you may have to scroll to it on a short
+          viewport. Left as-is rather than pinned: pinning means the nav itself stops scrolling, and
+          making links unreachable to save a scroll is the worse trade.
+          Shown when COLLAPSED too, which it previously was not — collapsing the nav hid the version
+          outright, and that is the one state where hunting for it is hardest. */}
+      <div style={{ marginTop: "auto", flex: "none", padding: collapsed ? "12px 0 6px" : "12px 11px 6px",
+                    borderTop: `1px solid ${t.border}`, color: t.subtle, fontSize: 12,
+                    textAlign: collapsed ? "center" : "left", whiteSpace: "nowrap" }}
+           title={ver ? `Network Insights v${ver}` : "Network Insights"}>
+        {collapsed ? (ver ? `v${ver}` : "") : `Network Insights${ver ? ` · v${ver}` : ""}`}
+      </div>
     </nav>
   );
 };

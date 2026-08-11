@@ -12,6 +12,27 @@ change always share a version number.
 
 ---
 
+## 1.3.0 — 2026-08-11
+
+**Retire moved to the device page.** It was an inline action on every row of the Devices table.
+Retiring withdraws the monitoring configuration from every extension holding a device — polling
+stops, the licence frees, and the undo is re-onboarding rather than a click. To retire something you
+now open it first, so you have seen its name, address, site, role and state before deciding. The
+confirmation is unchanged.
+
+**The `hide` button is gone.** It wrote a *shared* acknowledgement, so one person hiding a device
+removed it from Fleet, Overview and Topology for everyone — while the label implied a personal view
+preference. Rather than leave a control whose behaviour contradicts its name, it is withdrawn until
+there is a per-user preference to hang it on.
+
+Nothing already hidden is stranded: **unhide remains** on the Devices page, and the acknowledgement
+mechanism itself is untouched because retire depends on it — a device entity cannot be deleted, so
+that flag is the only thing that takes a retired device off the live views.
+
+*Upgrade action: none.*
+
+---
+
 ## 1.2.2 — 2026-08-11
 
 **Root-cause cards now name the real source of the dependency graph.** A card said "graph source:
@@ -100,7 +121,7 @@ deployment guides, extracted from the development repository into this one.
 **Redeploying the RCA workflow is manual.** The app ships the workflow definition, but upgrading the
 app does not update a workflow already deployed on your tenant. Until the app detects and warns
 about this, check after any upgrade: the deployed workflow's description ends with the version that
-produced it, e.g. `[Network Insights v1.2.2]`. If it does not match the app version in the sidebar,
+produced it, e.g. `[Network Insights v1.3.0]`. If it does not match the app version in the sidebar,
 redeploy from **Configuration → Network RCA**.
 
 **RCA topology direction depends on NetBox roles.** The dependency graph is oriented using

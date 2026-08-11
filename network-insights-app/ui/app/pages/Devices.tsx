@@ -5,8 +5,7 @@ import { Heading, Text, Paragraph } from "@dynatrace/strato-components/typograph
 import { t, mono } from "../theme";
 import { Panel, Pill, StatTile, Tag, Segmented, SitePicker } from "../components/ui";
 import { useFleet } from "../lib/data";
-import { useDeviceLifecycle, ARCHIVE_AFTER_DAYS, useAcknowledgedDevices } from "../lib/lifecycle";
-import { retireDevicePolling, refreshConfigured } from "../lib/provision";
+import { useDeviceLifecycle, ARCHIVE_AFTER_DAYS } from "../lib/lifecycle";
 import { useSites, siteOf } from "../lib/sites";
 
 import { useRoles, roleFor, roleGroupOf, roleIsInferred, ROLES, ROLE_LABEL, type Role } from "../lib/roles";
@@ -143,34 +142,11 @@ export const Devices = () => {
   // RETIRE, FROM THE PAGE THAT CAN FIND THINGS. Until now the only route was deleting a
   // monitoring configuration by API and then acknowledging what had already happened — which
   // means a customer could not retire anything at all. Fleet is the right home for it because
-  // retiring is a find-then-act task and this is the only page with search, site, role and
+  // Retiring is a find-then-act task, and finding still happens here — but the ACT moved to the
+  // device page (components/RetireAction). This page finds; the device page decides. See #2.
+  // The old note about this being the only page with search, site, role and
   // status filters; Configuration has a flat list.
-  const { acknowledge } = useAcknowledgedDevices();
-  const [retiring, setRetiring] = useState<Row | null>(null);
-  const [retireBusy, setRetireBusy] = useState(false);
-  const [retireMsg, setRetireMsg] = useState<{ tone: "ok" | "err"; msg: string } | null>(null);
 
-  async function doRetire(r: Row) {
-    setRetireBusy(true);
-    const res = await retireDevicePolling({ ip: r.ip, name: r.device });
-    setRetireBusy(false);
-    setRetiring(null);
-    if (!res.ok && !res.removed?.length) {
-      setRetireMsg({ tone: "err", msg: res.error || `Could not retire ${r.label}.` });
-      return;
-    }
-    // Acknowledge REGARDLESS of how much intent came off. The configurations are gone or
-    // shrinking, the entity cannot be deleted at all (405), and leaving the row on the live
-    // fleet after the operator affirmed the retirement is the behaviour this whole feature
-    // exists to remove. Reversible from the Retired tab.
-    acknowledge(r.ip);
-    refreshConfigured();   // intent just changed on the tenant; the 60s cache would hide it
-    const n = res.removed?.length ?? 0;
-    setRetireMsg(res.partial
-      ? { tone: "err", msg: `${r.label}: withdrawn from ${n} configuration${n === 1 ? "" : "s"}, but ${res.failed?.length} could not be updated — it may still be polled. See Retired.` }
-      : { tone: "ok", msg: `${r.label} retired — withdrawn from ${n} configuration${n === 1 ? "" : "s"}. It is on the Retired tab and can be restored from there.` });
-    q.refresh();
-  }
   const toggleSel = (ip: string) => setSel((p) => { const n = new Set(p); n.has(ip) ? n.delete(ip) : n.add(ip); return n; });
 
   const siteList = Array.from(new Set(rows.map((r) => r.site))).sort();
@@ -248,23 +224,6 @@ export const Devices = () => {
         <RetiredTable />
       ) : (
       <>
-      {retireMsg ? (
-        <div style={{ border: `1px solid ${retireMsg.tone === "ok" ? t.up : t.down}44`,
-                      background: t.cardSubtle, borderRadius: 8, padding: "8px 12px", fontSize: 13 }}>
-          <Flex gap={8} style={{ alignItems: "center", flexWrap: "wrap" }}>
-            <Text style={{ color: retireMsg.tone === "ok" ? t.up : t.down, fontWeight: 600 }}>
-              {retireMsg.tone === "ok" ? "Retired" : "Partly retired"}
-            </Text>
-            <Text style={{ color: t.subtle }}>{retireMsg.msg}</Text>
-            <button onClick={() => setRetireMsg(null)}
-                    style={{ background: "none", border: 0, color: t.accent, cursor: "pointer", fontSize: 13 }}>dismiss</button>
-          </Flex>
-        </div>
-      ) : null}
-      {retiring ? (
-        <RetireConfirm row={retiring} busy={retireBusy}
-                       onCancel={() => setRetiring(null)} onConfirm={() => void doRetire(retiring)} />
-      ) : null}
       <IntentNote intent={(q as any).intent} sources={(q as any).sources} />
       <BulkBar
         selected={sel} sites={knownSites}
@@ -331,23 +290,23 @@ export const Devices = () => {
                     <td style={cell} onClick={(e) => e.stopPropagation()}><SiteCell addr={r.ip} legacyName={r.device} site={r.site} sites={knownSites} onAssign={assign} /></td>
                     <td style={cell} onClick={(e) => e.stopPropagation()}><RoleCell addr={r.ip} role={r.roleExact} guessed={r.roleGuessed} onAssign={assignRole} /></td>
                     <td style={{ ...cell, textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
-                      {/* TWO ACTIONS, because they are two different intents and conflating them
-                          makes every reversible act carry an irreversible cost.
-                            hide   — acknowledge only. Off Fleet/Overview/Topology, STILL POLLED,
-                                     undone in one click. This is the clutter/demo/re-cabling case.
-                            retire — withdraws the monitoring configuration. Stops collection and
-                                     frees the licence, and cannot be undone with a click because
-                                     re-onboarding needs a credential the app does not retain. */}
+                      {/* ROW ACTIONS ARE NAVIGATION ONLY.
+                            `hide` was removed: it wrote a SHARED acknowledgement, so one person
+                            hiding a device removed it from everyone's Fleet, Overview and
+                            Topology — while the label implied a personal view preference (#1).
+                            `retire` moved to the device page: it withdraws the monitoring
+                            configuration from every extension holding the device, and the undo is
+                            re-onboarding rather than a click (#2). It should not sit on a row in a
+                            list people scan.
+                          The acknowledgement mechanism itself stays — retire depends on it, since
+                          a device entity cannot be deleted (405) and the flag is the only thing
+                          that takes a retired device off the live views. */}
                       <Flex gap={6} style={{ justifyContent: "flex-end" }}>
-                        <button onClick={() => acknowledge(r.ip)} title={`Hide ${r.label} from the live views — still polled, undo any time from Retired`}
-                                style={{ background: "none", border: 0, color: t.subtle, cursor: "pointer",
+                        <button onClick={() => nav(`/device/${encodeURIComponent(r.device || r.ip)}`)}
+                                title={`Open ${r.label}`}
+                                style={{ background: "none", border: 0, color: t.accent, cursor: "pointer",
                                          fontSize: 12.5, padding: "2px 4px" }}>
-                          hide
-                        </button>
-                        <button onClick={() => setRetiring(r)} title={`Retire ${r.label} — stops polling`}
-                                style={{ background: "none", border: 0, color: t.subtle, cursor: "pointer",
-                                         fontSize: 12.5, padding: "2px 4px" }}>
-                          retire
+                          details ›
                         </button>
                       </Flex>
                     </td>
@@ -423,40 +382,6 @@ function BulkBar({ selected, sites, onSite, onRole, onClear }: {
    action, then a confirmation naming the device and stating what will happen. Reversible from the
    Retired tab, and it says so, because an operator who believes an action is permanent will not
    take it and will leave the clutter instead. */
-function RetireConfirm({ row, busy, onCancel, onConfirm }:
-  { row: { label: string; ip: string; status: string }; busy: boolean; onCancel: () => void; onConfirm: () => void }) {
-  return (
-    <div style={{ border: `1px solid ${t.warn}55`, background: t.warnBg, borderRadius: 8, padding: "12px 14px" }}>
-      <Flex flexDirection="column" gap={8}>
-        <Text style={{ fontWeight: 700, color: t.warn }}>Retire {row.label}?</Text>
-        <Text style={{ fontSize: 13, color: t.subtle }}>
-          This removes {row.ip} from every monitoring configuration that polls it, so Dynatrace
-          stops collecting from the device. It then appears only under <b>Retired</b> — not on
-          Fleet, Overview or Topology.
-          {row.status === "up" ? " This device is currently UP and reporting." : ""}
-        </Text>
-        <Text style={{ fontSize: 12.5, color: t.subtle }}>
-          Historical data is kept, and the device entity remains in Dynatrace — entities cannot be
-          deleted. You can restore it from the Retired tab.
-        </Text>
-        <Flex gap={8} style={{ marginTop: 2 }}>
-          <button onClick={onConfirm} disabled={busy}
-                  style={{ background: t.warn, color: "#fff", border: 0, borderRadius: 6,
-                           padding: "6px 14px", fontSize: 13, fontWeight: 600,
-                           cursor: busy ? "wait" : "pointer", opacity: busy ? 0.6 : 1 }}>
-            {busy ? "Retiring…" : "Yes, retire it"}
-          </button>
-          <button onClick={onCancel} disabled={busy}
-                  style={{ background: "none", border: `1px solid ${t.border}`, borderRadius: 6,
-                           color: t.ink, padding: "6px 14px", fontSize: 13, cursor: "pointer" }}>
-            Cancel
-          </button>
-        </Flex>
-      </Flex>
-    </div>
-  );
-}
-
 /* ── what the app actually read from the extension configurations ────────────
    This is a DIAGNOSTIC, and it exists because the read it reports on cannot be observed any
    other way. It goes to /platform/extensions/v2/..., which rejects both an Api-Token and a

@@ -11,6 +11,7 @@ import { outerTs } from "../lib/netflow";
 import { useRoles, roleFor, orientByRole } from "../lib/roles";
 import { useTimeframe } from "../lib/timeframe";
 import { fmt, badge } from "../lib/format";
+import { RetireAction } from "../components/RetireAction";
 const num = (v: any) => Math.round(Number(v) || 0);
 // escape a device name for safe interpolation into a DQL double-quoted string literal (route param → DQL)
 const esc = (s: string) => s.replace(/(["\\])/g, "\\$1");
@@ -467,6 +468,14 @@ export const DeviceDetail = () => {
           </>
         )}
       </Panel>
+
+      {/* Retire lives HERE, not on a row in the Devices table — see components/RetireAction for why.
+          Last on the page on purpose: you reach it having scrolled past this device's interfaces,
+          activity, dependencies and compliance, so "am I retiring the right thing" is already
+          answered by the time you arrive. */}
+      {ip && ip !== "—" ? (
+        <RetireAction device={{ ip, name: infoRow?.sysName || dev, label, status: up > 0 ? "up" : "down" }} />
+      ) : null}
 
       {entity ? (
         entityLink(entity) ? (
