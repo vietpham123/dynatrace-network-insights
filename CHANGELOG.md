@@ -12,11 +12,21 @@ change always share a version number.
 
 ---
 
+## 1.3.1 — 2026-08-11
+
+**Copy fix.** The retire panel claimed retiring "frees the licence". There is no licensing involved,
+so the claim is simply removed — retiring withdraws the monitoring configuration and polling stops,
+which is the part that is true and the part that matters.
+
+*Upgrade action: none.*
+
+---
+
 ## 1.3.0 — 2026-08-11
 
 **Retire moved to the device page.** It was an inline action on every row of the Devices table.
-Retiring withdraws the monitoring configuration from every extension holding a device — polling
-stops, the licence frees, and the undo is re-onboarding rather than a click. To retire something you
+Retiring withdraws the monitoring configuration from every extension holding a device, so polling
+stops — and the undo is re-onboarding rather than a click. To retire something you
 now open it first, so you have seen its name, address, site, role and state before deciding. The
 confirmation is unchanged.
 
@@ -121,7 +131,7 @@ deployment guides, extracted from the development repository into this one.
 **Redeploying the RCA workflow is manual.** The app ships the workflow definition, but upgrading the
 app does not update a workflow already deployed on your tenant. Until the app detects and warns
 about this, check after any upgrade: the deployed workflow's description ends with the version that
-produced it, e.g. `[Network Insights v1.3.0]`. If it does not match the app version in the sidebar,
+produced it, e.g. `[Network Insights v1.3.1]`. If it does not match the app version in the sidebar,
 redeploy from **Configuration → Network RCA**.
 
 **RCA topology direction depends on NetBox roles.** The dependency graph is oriented using

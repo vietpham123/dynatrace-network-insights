@@ -8,8 +8,8 @@ import { useAcknowledgedDevices } from "../lib/lifecycle";
 /* ── RETIRE, AND WHY IT LIVES ON THE DEVICE PAGE ─────────────────────────────
    This used to be an inline action on every row of the Devices table — a list people scan,
    filter and sort. Retiring withdraws the monitoring configuration from EVERY extension holding
-   the device: polling stops, the licence frees, and the undo is re-onboarding rather than a
-   click, because the app does not retain the credential needed to recreate the configuration.
+   the device, so polling stops — and the undo is re-onboarding rather than a click, because the
+   app does not retain the credential needed to recreate the configuration.
    One mis-aimed cursor in a dense table was all it took.
 
    It now lives on the device's own page. To retire something you must open it, which means you
@@ -110,9 +110,9 @@ export function RetireAction({ device, onRetired }: { device: Device; onRetired?
     <div style={{ border: `1px solid ${t.down}33`, background: t.downBg, borderRadius: 10, padding: "13px 15px" }}>
       <Text style={{ fontWeight: 700, color: t.down, display: "block", marginBottom: 3 }}>Retire this device</Text>
       <Text style={{ fontSize: 13, color: t.subtle, display: "block", marginBottom: 10 }}>
-        Withdraws its monitoring configuration from every extension holding it. Polling stops and the
-        licence is freed. It stays on the Retired tab and can be restored — but restoring means
-        re-onboarding, not one click.
+        Withdraws its monitoring configuration from every extension holding it, so polling stops.
+        It stays on the Retired tab and can be restored — but restoring means re-onboarding, not
+        one click.
       </Text>
       <button onClick={() => setConfirming(true)}
               style={{ background: "none", border: `1px solid ${t.down}`, borderRadius: 7,
