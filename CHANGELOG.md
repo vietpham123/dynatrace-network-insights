@@ -12,6 +12,20 @@ change always share a version number.
 
 ---
 
+## 1.2.2 — 2026-08-11
+
+**Root-cause cards now name the real source of the dependency graph.** A card said "graph source:
+NetBox declared cabling" regardless of what it had actually walked — text left over from when NetBox
+was the only source of device-to-device topology. Cards now report the sources behind the specific
+edges they used, e.g. LLDP neighbour discovery, NetBox declared cabling, or a controller API.
+
+Sources are read from the data, not from a fixed list — if you emit topology with your own
+`discovery` value, the card names it.
+
+*Upgrade action: redeploy the RCA workflow from Configuration → Network RCA.*
+
+---
+
 ## 1.2.1 — 2026-08-11
 
 **A real app icon.** The launcher and navigation were showing an auto-generated "Ne" tile. Replaced
@@ -86,7 +100,7 @@ deployment guides, extracted from the development repository into this one.
 **Redeploying the RCA workflow is manual.** The app ships the workflow definition, but upgrading the
 app does not update a workflow already deployed on your tenant. Until the app detects and warns
 about this, check after any upgrade: the deployed workflow's description ends with the version that
-produced it, e.g. `[Network Insights v1.2.1]`. If it does not match the app version in the sidebar,
+produced it, e.g. `[Network Insights v1.2.2]`. If it does not match the app version in the sidebar,
 redeploy from **Configuration → Network RCA**.
 
 **RCA topology direction depends on NetBox roles.** The dependency graph is oriented using
