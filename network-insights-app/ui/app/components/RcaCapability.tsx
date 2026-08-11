@@ -6,7 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { t } from "../theme";
 import { Panel, Tag } from "./ui";
 import { StepRow, Step } from "./StepRow";
-import { NETWORK_RCA_WORKFLOW } from "../lib/networkRcaWorkflow";
+import { NETWORK_RCA_WORKFLOW, NETWORK_RCA_WORKFLOW_VERSION } from "../lib/networkRcaWorkflow";
 
 // The unified reasoner. ONE scheduled workflow does complete deterministic network RCA — whole-device
 // & power-domain outages AND partial interface failures — in a single 3-min poll. It replaces the two
@@ -101,6 +101,12 @@ export function RcaCapability() {
 
         <Flex gap={12} flexWrap="wrap" alignItems="center">
           <button onClick={download} style={{ ...btn, background: t.accent, color: "#fff" }}>⤓ Download workflow JSON</button>
+          {/* Which revision am I holding? The definition carries no version of its own, and it has
+              changed several times — so the app version that ships it is stamped here and in the
+              downloaded file's description. */}
+          <Text style={{ fontSize: 12.5, color: t.subtle, alignSelf: "center" }}>
+            v{NETWORK_RCA_WORKFLOW_VERSION} · 6 tasks · ships disabled
+          </Text>
           {link ? (
             <a href={link} target="_top" rel="noreferrer" style={{ ...btn, background: "none", color: t.accent, border: `1px solid ${t.border}` }}>Open Workflows app →</a>
           ) : null}

@@ -27,6 +27,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "workflows", "network_rca_workflow.json")
+APP_CFG = os.path.join(ROOT, "network-insights-app", "app.config.json")
 OUT = os.path.join(ROOT, "network-insights-app", "ui", "app", "lib", "networkRcaWorkflow.ts")
 
 HEADER = """// GENERATED FILE — DO NOT EDIT BY HAND.
@@ -61,8 +62,18 @@ def build() -> str:
         # silently start creating problem cards on a tenant.
         sched["isActive"] = False
 
+    # STAMP THE PROVENANCE. The workflow definition carries no version of its own, so a customer
+    # who downloaded it had no way to tell which revision they were holding — and it changed three
+    # times on 2026-08-11 alone. It is versioned WITH the app, because that is what ships it, so
+    # the app version is the honest identifier. Rendered next to the download button, and written
+    # into the description so it survives into the tenant even when the file is passed around.
+    with open(APP_CFG) as fh:
+        app_version = json.load(fh)["app"]["version"]
+    wf["description"] = f"{wf.get('description','').rstrip()} [Network Insights v{app_version}]"
+
     body = json.dumps(wf, indent=2, ensure_ascii=False)
-    return f"{HEADER}export const NETWORK_RCA_WORKFLOW: any = {body};\n"
+    return (f"{HEADER}export const NETWORK_RCA_WORKFLOW_VERSION = \"{app_version}\";\n\n"
+            f"export const NETWORK_RCA_WORKFLOW: any = {body};\n")
 
 
 def main() -> None:
