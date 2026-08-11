@@ -12,7 +12,7 @@ change always share a version number.
 
 ---
 
-## 1.2.0 — 2026-08-11
+## 1.2.1 — 2026-08-11
 
 **A real app icon.** The launcher and navigation were showing an auto-generated "Ne" tile. Replaced
 with a signal mark — a node with radiating arcs — as a white glyph on a cyan-to-blue tile, the same
@@ -86,7 +86,7 @@ deployment guides, extracted from the development repository into this one.
 **Redeploying the RCA workflow is manual.** The app ships the workflow definition, but upgrading the
 app does not update a workflow already deployed on your tenant. Until the app detects and warns
 about this, check after any upgrade: the deployed workflow's description ends with the version that
-produced it, e.g. `[Network Insights v1.2.0]`. If it does not match the app version in the sidebar,
+produced it, e.g. `[Network Insights v1.2.1]`. If it does not match the app version in the sidebar,
 redeploy from **Configuration → Network RCA**.
 
 **RCA topology direction depends on NetBox roles.** The dependency graph is oriented using
