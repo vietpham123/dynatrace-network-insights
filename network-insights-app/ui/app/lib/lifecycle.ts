@@ -2,7 +2,7 @@ import React from "react";
 import { useDql } from "@dynatrace-sdk/react-hooks";
 import { stateClient } from "@dynatrace-sdk/client-state";
 import { useConfiguredDevices } from "./provision";
-import { livenessUnion } from "./data";
+import { livenessUnion } from "./liveness";
 
 /* ============================================================================
    DEVICE LIFECYCLE — intent vs observation
@@ -97,7 +97,7 @@ export function useAcknowledgedDevices() {
   return { acked, acknowledge, unacknowledge };
 }
 
-// A DEVICE WITHOUT INTERFACES IS STILL A DEVICE — see livenessUnion in ./data.
+// A DEVICE WITHOUT INTERFACES IS STILL A DEVICE — see livenessUnion in ./liveness.
 // This asked `cno.if.oper_status` alone, so a UPS or PDU (no ifTable, and correctly not polled
 // for one since the 0.0.14 feature-set migration) was invisible to lifecycle entirely: listed on
 // the Devices page by the roster, which unions both metrics, yet never "live" here.
